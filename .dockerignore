@@ -1,0 +1,7 @@
+.git
+.github
+build
+data
+*.zip
+*.tar.gz
+*.bak

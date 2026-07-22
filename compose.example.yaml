@@ -1,0 +1,32 @@
+services:
+  compose-updater:
+    image: ghcr.io/guchengod/compose-updater:latest
+    container_name: compose-updater
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      BARK_DEVICE_KEY: ${BARK_DEVICE_KEY:-}
+      LOG_LEVEL: info
+      COMPOSE_UPDATER_DATA_DIR: /data
+      COMPOSE_UPDATER_SKIP_FILES: /opt/compose-updater/compose.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.json:/config/config.json:ro
+      - ./data:/data
+
+      # 扫描目录必须可写，因为目标标签变化时会修改 Compose 文件。
+      # 容器内路径应与宿主机绝对路径保持一致。
+      - /a:/a:rw
+      - /b:/b:rw
+
+      # 私有 Registry 可选：挂载 Docker 登录凭据。
+      # - /root/.docker/config.json:/root/.docker/config.json:ro
+    command:
+      - serve
+      - -config
+      - /config/config.json
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

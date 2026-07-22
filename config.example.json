@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "paths": [
+    "/a",
+    "/b"
+  ],
+  "depth": 1,
+  "schedule": "0 4 * * *",
+  "timezone": "Asia/Shanghai",
+  "run_on_start": true,
+  "stable_only": true,
+  "registry_proxy": "",
+  "bark": {
+    "enabled": false,
+    "endpoint": "https://api.day.app/push",
+    "device_key": "",
+    "device_key_env": "BARK_DEVICE_KEY",
+    "group": "Docker更新"
+  }
+}
