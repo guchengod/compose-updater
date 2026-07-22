@@ -47,7 +47,8 @@ jobs:
           FNPACK: /tmp/fnpack
         run: ./scripts/build-fnos.sh
       - name: Generate checksums
-        run: sha256sum build/fnos/*.fpk > build/fnos/SHA256SUMS-fnOS
+        working-directory: build/fnos
+        run: sha256sum *.fpk > SHA256SUMS-fnOS
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
