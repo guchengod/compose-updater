@@ -62,6 +62,9 @@ curl -fsSLo .env https://raw.githubusercontent.com/guchengod/compose-updater/mai
   "paths": [
     "/srv/compose"
   ],
+  "skip_dirs": [
+    "/srv/compose/compose-updater"
+  ],
   "depth": 2,
   "schedule": "0 4 * * *",
   "timezone": "Asia/Shanghai",
@@ -154,6 +157,7 @@ Compose 中已经使用 `latest` 时不回写文件。程序每次执行 `docker
 {
   "version": 1,
   "paths": ["/srv/compose"],
+  "skip_dirs": ["/srv/compose/compose-updater"],
   "depth": 2,
   "schedule": "0 4 * * *",
   "timezone": "Asia/Shanghai",
@@ -174,6 +178,7 @@ Compose 中已经使用 `latest` 时不回写文件。程序每次执行 `docker
 |---|---:|---|
 | `version` | `1` | 配置格式版本，目前只支持 `1` |
 | `paths` | 无 | 必填，扫描根目录的绝对路径列表 |
+| `skip_dirs` | `[]` | 跳过的绝对目录列表；命中后整个子树都不再扫描 |
 | `depth` | `1` | 递归扫描深度，范围 `0-5` |
 | `schedule` | `0 4 * * *` | 标准五段 Cron |
 | `timezone` | `Asia/Shanghai` | IANA 时区 |
@@ -196,6 +201,17 @@ depth=1：包含直接子目录
 depth=2：再向下扫描一层
 ...
 depth=5：最大允许值
+```
+
+`skip_dirs` 优先于 `depth`。无论扫描深度配置为多少，只要当前目录等于跳过目录或位于其下方，程序都会立即剪枝。容器部署时必须填写容器内可见、并与 `paths` 对应的绝对路径。例如扫描 `/home`，但不希望扫描 updater 自身和数据库目录：
+
+```json
+"paths": ["/home"],
+"skip_dirs": [
+  "/home/compose-update",
+  "/home/postgresql"
+],
+"depth": 5
 ```
 
 识别以下文件名，同一目录有多个文件时按此顺序选择第一个：
@@ -391,7 +407,7 @@ compose-updater serve -config ./config.json
 compose-updater scan -config config.json
 ```
 
-确认 `paths` 是绝对路径、挂载路径在容器内存在、文件名受支持且 `depth` 足够。
+确认 `paths` 是绝对路径、挂载路径在容器内存在、文件名受支持、`depth` 足够，并检查目标目录是否位于 `skip_dirs` 中。
 
 ### 项目被跳过
 

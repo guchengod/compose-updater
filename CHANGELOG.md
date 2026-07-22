@@ -2,6 +2,10 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+- 新增 `skip_dirs` 配置；扫描命中指定绝对目录时直接剪枝，不受 `depth` 影响。
+
 ## [v0.4.0] - 2026-07-22
 
 首次公开发布：

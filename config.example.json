@@ -4,6 +4,7 @@
     "/a",
     "/b"
   ],
+  "skip_dirs": [],
   "depth": 1,
   "schedule": "0 4 * * *",
   "timezone": "Asia/Shanghai",

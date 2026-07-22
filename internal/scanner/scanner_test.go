@@ -14,7 +14,7 @@ func TestDiscoverDepthAndPriority(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "one", "compose.yaml"))
 	mustWrite(t, filepath.Join(root, "one", "two", "compose.yml"))
 
-	files, err := Discover([]string{root}, 1)
+	files, err := Discover([]string{root}, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestDiscoverDepthAndPriority(t *testing.T) {
 		t.Fatalf("child priority mismatch: %s", files[1])
 	}
 
-	files, err = Discover([]string{root}, 2)
+	files, err = Discover([]string{root}, 2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,12 +41,57 @@ func TestDiscoverDeduplicatesOverlappingRoots(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "app")
 	mustWrite(t, filepath.Join(child, "compose.yml"))
-	files, err := Discover([]string{root, child}, 1)
+	files, err := Discover([]string{root, child}, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(files) != 1 {
 		t.Fatalf("expected one file, got %#v", files)
+	}
+}
+
+func TestDiscoverPrunesSkippedDirectoryRegardlessOfDepth(t *testing.T) {
+	root := t.TempDir()
+	skipped := filepath.Join(root, "skip")
+	mustWrite(t, filepath.Join(root, "keep", "compose.yml"))
+	mustWrite(t, filepath.Join(skipped, "compose.yml"))
+	mustWrite(t, filepath.Join(skipped, "nested", "compose.yml"))
+
+	files, err := Discover([]string{root}, 5, []string{skipped})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || filepath.Dir(files[0]) != filepath.Join(root, "keep") {
+		t.Fatalf("skipped directory was traversed: %#v", files)
+	}
+}
+
+func TestDiscoverSkipsRootInsideSkippedDirectory(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "skip", "nested")
+	mustWrite(t, filepath.Join(root, "compose.yml"))
+
+	files, err := Discover([]string{root}, 5, []string{filepath.Join(parent, "skip")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("root inside skipped directory must be ignored: %#v", files)
+	}
+}
+
+func TestDiscoverSkipDoesNotMatchPathPrefixSibling(t *testing.T) {
+	root := t.TempDir()
+	skipped := filepath.Join(root, "app")
+	mustWrite(t, filepath.Join(skipped, "compose.yml"))
+	mustWrite(t, filepath.Join(root, "app-data", "compose.yml"))
+
+	files, err := Discover([]string{root}, 1, []string{skipped})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || filepath.Dir(files[0]) != filepath.Join(root, "app-data") {
+		t.Fatalf("path-prefix sibling must not be skipped: %#v", files)
 	}
 }
 

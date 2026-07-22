@@ -21,16 +21,17 @@ type candidate struct {
 	priority int
 }
 
-// Discover scans each root up to maxDepth directory levels. Depth 0 means the
-// root directory itself; depth 1 also includes direct child directories.
-func Discover(roots []string, maxDepth int) ([]string, error) {
+// Discover scans each root up to maxDepth directory levels while pruning every
+// directory listed in skipDirs. Depth 0 means the root directory itself; depth
+// 1 also includes direct child directories.
+func Discover(roots []string, maxDepth int, skipDirs []string) ([]string, error) {
 	if maxDepth < 0 || maxDepth > 5 {
 		return nil, fmt.Errorf("扫描深度必须在 0 到 5 之间，当前为 %d", maxDepth)
 	}
 
 	found := make(map[string]candidate)
 	for _, root := range roots {
-		if err := walkRoot(root, maxDepth, found); err != nil {
+		if err := walkRoot(root, maxDepth, skipDirs, found); err != nil {
 			return nil, err
 		}
 	}
@@ -43,11 +44,14 @@ func Discover(roots []string, maxDepth int) ([]string, error) {
 	return files, nil
 }
 
-func walkRoot(root string, maxDepth int, found map[string]candidate) error {
+func walkRoot(root string, maxDepth int, skipDirs []string, found map[string]candidate) error {
 	root = filepath.Clean(root)
 	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("访问 %q: %w", path, walkErr)
+		}
+		if entry.IsDir() && isSkippedDir(path, skipDirs) {
+			return filepath.SkipDir
 		}
 		relative, err := filepath.Rel(root, path)
 		if err != nil {
@@ -82,6 +86,20 @@ func walkRoot(root string, maxDepth int, found map[string]candidate) error {
 		}
 		return nil
 	})
+}
+
+func isSkippedDir(path string, skipDirs []string) bool {
+	path = normalize(path)
+	for _, skipDir := range skipDirs {
+		relative, err := filepath.Rel(normalize(skipDir), path)
+		if err != nil || filepath.IsAbs(relative) {
+			continue
+		}
+		if relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))) {
+			return true
+		}
+	}
+	return false
 }
 
 func depth(relative string) int {

@@ -57,6 +57,35 @@ func TestLoadRegistryProxy(t *testing.T) {
 	}
 }
 
+func TestLoadNormalizesAndDeduplicatesSkipDirs(t *testing.T) {
+	root := t.TempDir()
+	skip := filepath.Join(root, "skip")
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"skip_dirs":[` + quote(" "+skip+" ") + `,` + quote(skip) + `],"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.SkipDirs) != 1 || cfg.SkipDirs[0] != filepath.Clean(skip) {
+		t.Fatalf("unexpected skip dirs: %#v", cfg.SkipDirs)
+	}
+}
+
+func TestLoadRejectsRelativeSkipDir(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"skip_dirs":["relative"],"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected relative skip directory error")
+	}
+}
+
 func TestLoadRejectsInvalidRegistryProxy(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(t.TempDir(), "config.json")

@@ -102,7 +102,7 @@ func (u *Updater) CheckPrerequisites(ctx context.Context) error {
 }
 
 func (u *Updater) Discover() ([]string, error) {
-	return scanner.Discover(u.cfg.Paths, u.cfg.Depth)
+	return scanner.Discover(u.cfg.Paths, u.cfg.Depth, u.cfg.SkipDirs)
 }
 
 func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
