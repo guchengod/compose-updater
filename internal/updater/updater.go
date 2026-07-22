@@ -213,6 +213,14 @@ func (u *Updater) runProject(parent context.Context, composeFile string, apply b
 		return fail(result, err)
 	}
 	composeClient := compose.NewClient(u.cfg.Docker, composeFile, u.runner)
+	resolveCtx, resolveCancel := context.WithTimeout(parent, u.cfg.ConfigTimeout())
+	projectName, _, resolveErr := composeClient.ResolveProjectName(resolveCtx)
+	resolveCancel()
+	if resolveErr != nil {
+		log.Warn("compose_project_resolve_failed", "error", resolveErr)
+	} else if projectName != "" {
+		log.Info("compose_project_resolved", "project", projectName)
+	}
 	configCtx, cancel := context.WithTimeout(parent, u.cfg.ConfigTimeout())
 	model, _, err := composeClient.ParseConfig(configCtx)
 	cancel()
