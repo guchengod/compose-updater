@@ -2,6 +2,22 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [v0.6.4] - 2026-07-22
+
+- 补齐飞牛应用中心审核所需的最低 fnOS 版本、目录授权开关和面向用户的更新说明。
+- 飞牛 FPK 构建会从对应版本的 CHANGELOG 自动生成 manifest 更新说明，避免发布包元数据过期。
+- 新增飞牛官方商店发布材料、权限说明和测试清单。
+
+## [v0.6.3] - 2026-07-22
+
+- 根据 Compose 配置文件路径识别已经运行的真实项目名，兼容飞牛 Docker 中自定义的项目名称。
+- 所有 Compose 查询、拉取和重建操作统一使用已解析的项目名，避免运行容器被误判为不存在。
+
+## [v0.6.2] - 2026-07-22
+
+- 修复运行摘要中检查项目、更新项目、失败项目和总耗时的图标对齐问题。
+- 窄窗口下摘要指标自动换行，避免内容相互挤压。
+
 ## [v0.6.1] - 2026-07-22
 
 - 收窄运行记录栏，为运行摘要和执行时间线保留更多可视空间。
@@ -53,3 +69,6 @@
 [v0.5.1]: https://github.com/guchengod/compose-updater/compare/v0.5.0...v0.5.1
 [v0.6.0]: https://github.com/guchengod/compose-updater/compare/v0.5.1...v0.6.0
 [v0.6.1]: https://github.com/guchengod/compose-updater/compare/v0.6.0...v0.6.1
+[v0.6.2]: https://github.com/guchengod/compose-updater/compare/v0.6.1...v0.6.2
+[v0.6.3]: https://github.com/guchengod/compose-updater/compare/v0.6.2...v0.6.3
+[v0.6.4]: https://github.com/guchengod/compose-updater/compare/v0.6.3...v0.6.4
