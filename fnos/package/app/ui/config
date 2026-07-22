@@ -1,7 +1,7 @@
 {
   ".url": {
     "ComposeUpdater.Application": {
-      "title": "{display_name}",
+      "title": "Compose Updater",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
       "protocol": "",

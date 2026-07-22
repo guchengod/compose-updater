@@ -6,6 +6,7 @@ MANAGER="${TRIM_APPDEST}/bin/fnos-manager"
 CONFIG="${TRIM_PKGETC}/config.json"
 SOCKET="${TRIM_APPDEST}/compose-updater.sock"
 UPDATER="${TRIM_APPDEST}/bin/compose-updater"
+RUNTIME_STATE="${TRIM_PKGVAR}/runtime.json"
 
 is_running() {
     [ -r "${PID_FILE}" ] || return 1
@@ -18,7 +19,7 @@ start_app() {
         return 0
     fi
     rm -f "${PID_FILE}" "${SOCKET}"
-    "${MANAGER}" -config "${CONFIG}" -socket "${SOCKET}" -updater "${UPDATER}" >>"${LOG_FILE}" 2>&1 &
+    "${MANAGER}" -config "${CONFIG}" -socket "${SOCKET}" -updater "${UPDATER}" -runtime-state "${RUNTIME_STATE}" >>"${LOG_FILE}" 2>&1 &
     printf '%s' "$!" >"${PID_FILE}"
     sleep 1
     if ! is_running; then

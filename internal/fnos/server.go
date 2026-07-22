@@ -2,6 +2,7 @@ package fnos
 
 import (
 	"context"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +25,7 @@ import (
 	"github.com/guchengod/compose-updater/internal/cronexpr"
 )
 
-//go:embed web/*
+//go:embed web
 var webFiles embed.FS
 
 type Server struct {
@@ -94,6 +97,20 @@ func (s *Server) ServeTCP(ctx context.Context, address string, devAdmin bool) er
 			handlerWithoutDev.ServeHTTP(w, r)
 		})
 	}
+	return serveTCP(ctx, address, handler)
+}
+
+// ServeStandalone exposes the shared runtime UI for native binary and Docker
+// deployments. Non-loopback listeners require HTTP Basic authentication because
+// this UI can modify configuration and trigger Docker updates.
+func (s *Server) ServeStandalone(ctx context.Context, address, username, password string) error {
+	if err := validateStandaloneAddress(address, password); err != nil {
+		return err
+	}
+	return serveTCP(ctx, address, s.standaloneHandler(username, password))
+}
+
+func serveTCP(ctx context.Context, address string, handler http.Handler) error {
 	httpServer := &http.Server{Addr: address, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
@@ -108,6 +125,43 @@ func (s *Server) ServeTCP(ctx context.Context, address string, devAdmin bool) er
 	return err
 }
 
+func validateStandaloneAddress(address, password string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("无效的 Web 监听地址 %q: %w", address, err)
+	}
+	ip := net.ParseIP(host)
+	loopback := strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
+	if !loopback && strings.TrimSpace(password) == "" {
+		return errors.New("Web 界面监听非本机地址时必须设置 COMPOSE_UPDATER_WEB_PASSWORD 或 -web-password")
+	}
+	return nil
+}
+
+func (s *Server) standaloneHandler(username, password string) http.Handler {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		username = "admin"
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity := username
+		if password != "" {
+			providedUser, providedPassword, ok := r.BasicAuth()
+			userOK := subtle.ConstantTimeCompare([]byte(providedUser), []byte(username)) == 1
+			passwordOK := subtle.ConstantTimeCompare([]byte(providedPassword), []byte(password)) == 1
+			if !ok || !userOK || !passwordOK {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Compose Updater"`)
+				http.Error(w, "需要登录 Compose Updater", http.StatusUnauthorized)
+				return
+			}
+			identity = providedUser
+		}
+		r.Header.Set("X-Trim-Isadmin", "true")
+		r.Header.Set("X-Trim-Username", identity)
+		s.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	setSecurityHeaders(w)
 	r.URL.Path = trimGatewayPrefix(r.URL.Path)
@@ -118,8 +172,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.requireAdmin(w, r, s.getConfig)
 	case r.URL.Path == "/api/config" && r.Method == http.MethodPost:
 		s.requireAdminMutation(w, r, s.saveConfig)
+	case r.URL.Path == "/api/directories" && r.Method == http.MethodGet:
+		s.requireAdmin(w, r, s.listDirectories)
 	case r.URL.Path == "/api/status" && r.Method == http.MethodGet:
 		s.requireAdmin(w, r, s.getStatus)
+	case r.URL.Path == "/api/runtime" && r.Method == http.MethodGet:
+		s.requireAdmin(w, r, s.getRuntime)
+	case r.URL.Path == "/api/run-now" && r.Method == http.MethodPost:
+		s.requireAdminMutation(w, r, s.runNow)
 	case r.URL.Path == "/api/proxy-test" && r.Method == http.MethodPost:
 		s.requireAdminMutation(w, r, s.testProxy)
 	case r.Method == http.MethodGet || r.Method == http.MethodHead:
@@ -143,15 +203,123 @@ func (s *Server) requireAdminMutation(w http.ResponseWriter, r *http.Request, ne
 			writeError(w, http.StatusForbidden, "请求来源校验失败")
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" {
-			parsed, err := url.Parse(origin)
-			if err != nil || !strings.EqualFold(parsed.Host, r.Host) {
-				writeError(w, http.StatusForbidden, "跨站请求已拒绝")
-				return
-			}
+		// fnOS proxies the browser request through a Unix socket and may replace
+		// Host with the gateway's internal upstream. Comparing Origin with r.Host
+		// therefore rejects legitimate same-origin requests. The custom header
+		// above already forces a browser CORS preflight for cross-origin callers;
+		// Sec-Fetch-Site lets us additionally reject an explicit cross-site fetch.
+		if strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "cross-site") {
+			writeError(w, http.StatusForbidden, "跨站请求已拒绝")
+			return
 		}
 		next(w, r)
 	})
+}
+
+func (s *Server) listDirectories(w http.ResponseWriter, r *http.Request) {
+	directory := strings.TrimSpace(r.URL.Query().Get("path"))
+	if directory == "" {
+		directory = strings.TrimSpace(s.defaultPath)
+	}
+	if directory == "" {
+		directory = string(filepath.Separator)
+	}
+	if !filepath.IsAbs(directory) {
+		writeError(w, http.StatusBadRequest, "目录必须是绝对路径")
+		return
+	}
+
+	directory = filepath.Clean(directory)
+	info, err := os.Stat(directory)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("无法访问目录 %q: %v", directory, err))
+		return
+	}
+	if !info.IsDir() {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("%q 不是目录", directory))
+		return
+	}
+
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		writeError(w, http.StatusForbidden, fmt.Sprintf("无法读取目录 %q: %v", directory, err))
+		return
+	}
+	directories := make([]map[string]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		directories = append(directories, map[string]string{
+			"name": entry.Name(),
+			"path": filepath.Join(directory, entry.Name()),
+		})
+	}
+	sort.Slice(directories, func(i, j int) bool {
+		return strings.ToLower(directories[i]["name"]) < strings.ToLower(directories[j]["name"])
+	})
+	parent := filepath.Dir(directory)
+	if parent == directory {
+		parent = ""
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path": directory, "parent": parent, "directories": directories, "locations": s.directoryLocations(),
+	})
+}
+
+func (s *Server) directoryLocations() []map[string]string {
+	seen := make(map[string]struct{})
+	seenUniqueKinds := make(map[string]struct{})
+	locations := make([]map[string]string, 0)
+	add := func(label, locationPath, kind string) {
+		appendDirectoryLocation(&locations, seen, seenUniqueKinds, label, locationPath, kind)
+	}
+
+	for _, authorized := range s.authorizedPaths {
+		clean := filepath.Clean(authorized)
+		parts := strings.Split(strings.TrimPrefix(clean, string(filepath.Separator)), string(filepath.Separator))
+		if len(parts) >= 2 && strings.HasPrefix(parts[0], "vol") {
+			volume := filepath.Join(string(filepath.Separator), parts[0])
+			userRoot := filepath.Join(volume, parts[1])
+			add("我的文件", userRoot, "personal")
+			add("存储空间 "+strings.TrimPrefix(parts[0], "vol"), volume, "storage")
+		}
+		add(filepath.Base(clean), clean, "authorized")
+	}
+
+	volumes, _ := filepath.Glob("/vol[0-9]*")
+	sort.Strings(volumes)
+	for _, volume := range volumes {
+		number := strings.TrimPrefix(filepath.Base(volume), "vol")
+		add("存储空间 "+number, volume, "storage")
+		add("我的文件", filepath.Join(volume, "1000"), "personal")
+		add("团队文件", filepath.Join(volume, "1001"), "team")
+	}
+	if len(locations) == 0 {
+		add("当前授权目录", s.defaultPath, "authorized")
+	}
+	return locations
+}
+
+func appendDirectoryLocation(locations *[]map[string]string, seenPaths, seenUniqueKinds map[string]struct{}, label, locationPath, kind string) {
+	locationPath = filepath.Clean(strings.TrimSpace(locationPath))
+	if !filepath.IsAbs(locationPath) {
+		return
+	}
+	if info, err := os.Stat(locationPath); err != nil || !info.IsDir() {
+		return
+	}
+	if _, ok := seenPaths[locationPath]; ok {
+		return
+	}
+	if kind == "personal" || kind == "team" {
+		if _, ok := seenUniqueKinds[kind]; ok {
+			return
+		}
+		seenUniqueKinds[kind] = struct{}{}
+	}
+	seenPaths[locationPath] = struct{}{}
+	*locations = append(*locations, map[string]string{"label": label, "path": locationPath, "kind": kind})
 }
 
 func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
@@ -204,6 +372,24 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) getRuntime(w http.ResponseWriter, _ *http.Request) {
+	snapshot := s.supervisor.Runtime()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"manager_running": true,
+		"updater_running": s.supervisor.Running(),
+		"version":         s.version,
+		"runtime":         snapshot,
+	})
+}
+
+func (s *Server) runNow(w http.ResponseWriter, _ *http.Request) {
+	if err := s.supervisor.TriggerRun(); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "message": "已请求立即运行，更新服务正在准备本轮检查"})
+}
+
 func (s *Server) testProxy(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Proxy string `json:"proxy"`
@@ -233,7 +419,21 @@ func (s *Server) testProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = response.Body.Close()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": response.Status})
+	message, authRequired := proxyTestMessage(response.StatusCode)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "status": response.Status, "status_code": response.StatusCode,
+		"registry_auth_required": authRequired, "message": message,
+	})
+}
+
+func proxyTestMessage(statusCode int) (string, bool) {
+	if statusCode == http.StatusUnauthorized {
+		return "代理连接正常，Registry 要求认证（这是 Docker Registry 的预期响应）", true
+	}
+	if statusCode >= 200 && statusCode < 400 {
+		return "代理连接正常，Docker Registry 可以访问", false
+	}
+	return fmt.Sprintf("代理已连通，Registry 返回 HTTP %d", statusCode), false
 }
 
 func decodeJSON(r *http.Request, destination any) error {

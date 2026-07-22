@@ -9,80 +9,115 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <img src="icon.png" alt="" width="42" height="42">
-      <div><strong>Compose Updater</strong><span>飞牛应用配置中心</span></div>
+      <img src="icon.png" alt="" width="40" height="40">
+      <div><strong>Compose Updater</strong><span>Compose 更新运行中心</span></div>
     </div>
-    <div class="status-line">
+    <div class="header-actions">
       <span id="runningBadge" class="badge muted">正在连接</span>
-      <span id="versionText">版本 —</span>
-      <span id="nextRunText">下次运行 —</span>
+      <div class="header-meta"><span id="versionText">版本 —</span><span id="nextRunText">下次运行 —</span></div>
+      <button id="runNowButton" class="primary button-with-icon" type="button"><img src="icons/player-play.svg" alt="">立即运行</button>
     </div>
   </header>
 
-  <div class="layout">
-    <aside class="sidebar" aria-label="配置导航">
-      <a class="active" href="#scan"><span>01</span>扫描范围</a>
-      <a href="#policy"><span>02</span>更新策略</a>
-      <a href="#registry"><span>03</span>Registry</a>
-      <a href="#notify"><span>04</span>通知设置</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="应用导航">
+      <nav>
+        <button class="nav-item active" type="button" data-view="runs"><img src="icons/history.svg" alt=""><span>运行记录</span></button>
+        <button class="nav-item" type="button" data-view="projects"><img src="icons/layout-dashboard.svg" alt=""><span>项目状态</span></button>
+        <div class="nav-label">配置</div>
+        <button class="nav-item" type="button" data-view="scan"><img src="icons/folders.svg" alt=""><span>扫描范围</span></button>
+        <button class="nav-item" type="button" data-view="policy"><img src="icons/adjustments.svg" alt=""><span>更新策略</span></button>
+        <button class="nav-item" type="button" data-view="registry"><img src="icons/world.svg" alt=""><span>Registry</span></button>
+        <button class="nav-item" type="button" data-view="notify"><img src="icons/bell.svg" alt=""><span>通知设置</span></button>
+      </nav>
+      <div class="scheduler-card">
+        <span class="scheduler-icon"><img src="icons/clock.svg" alt=""></span>
+        <div><strong>调度器</strong><span id="schedulerState">等待状态</span><small id="schedulerSchedule">—</small></div>
+      </div>
     </aside>
 
-    <main>
+    <main class="workspace">
       <div id="message" class="message" hidden></div>
-      <form id="configForm">
-        <section id="scan">
-          <div class="section-heading"><div><p class="eyebrow">SCAN SCOPE</p><h1>扫描范围</h1><p>选择包含 Compose 项目的目录，并排除无需检查的子目录。</p></div><span class="section-index">01</span></div>
-          <label>扫描目录 <span class="required">必填</span></label>
-          <div id="paths" class="path-list"></div>
-          <button class="text-button" type="button" data-add="paths">＋ 添加扫描目录</button>
-          <p id="authorizedHint" class="hint"></p>
 
-          <label>跳过目录</label>
-          <div id="skipDirs" class="path-list"></div>
-          <button class="text-button" type="button" data-add="skipDirs">＋ 添加跳过目录</button>
+      <section id="runsView" class="view runtime-view">
+        <aside class="run-history">
+          <div class="panel-heading"><div><span class="kicker">RUN HISTORY</span><h1>运行记录</h1></div><button id="refreshRuntime" class="icon-action" type="button" aria-label="刷新运行记录"><img src="icons/refresh.svg" alt=""></button></div>
+          <div id="runHistoryList" class="run-history-list"></div>
+        </aside>
+        <article id="runDetail" class="run-detail"></article>
+      </section>
 
-          <div class="field-row compact">
-            <div><label for="depth">扫描层级</label><input id="depth" type="number" min="0" max="5" required><p class="hint">0–5；0 仅检查扫描目录本身。</p></div>
+      <section id="projectsView" class="view page-view" hidden>
+        <div class="page-heading"><div><span class="kicker">PROJECT STATUS</span><h1>项目状态</h1><p>基于最近一轮真实检查结果，快速定位已更新、已跳过或失败的 Compose 项目。</p></div><img src="icons/layout-dashboard.svg" alt=""></div>
+        <div id="projectOverview" class="project-overview"></div>
+      </section>
+
+      <form id="configForm" class="settings-form">
+        <section id="scanView" class="view page-view settings-view" hidden>
+          <div class="page-heading"><div><span class="kicker">SCAN SCOPE</span><h1>扫描范围</h1><p>选择包含 Compose 项目的目录，并排除无需检查的子目录。</p></div><img src="icons/folders.svg" alt=""></div>
+          <div class="settings-card">
+            <label>扫描目录 <span class="required">必填</span></label>
+            <div id="paths" class="path-list"></div>
+            <button class="text-button" type="button" data-add="paths">添加扫描目录</button>
+            <p id="authorizedHint" class="hint"></p>
+            <div class="field-divider"></div>
+            <label>跳过目录</label>
+            <div id="skipDirs" class="path-list"></div>
+            <button class="text-button" type="button" data-add="skipDirs">添加跳过目录</button>
+            <div class="field-divider"></div>
+            <div class="compact-field"><label for="depth">扫描层级</label><input id="depth" type="number" min="0" max="5" required><p class="hint">0–5；0 仅检查扫描目录本身。</p></div>
           </div>
         </section>
 
-        <section id="policy">
-          <div class="section-heading"><div><p class="eyebrow">UPDATE POLICY</p><h2>更新策略</h2><p>控制检查时间、版本选择和启动行为。</p></div><span class="section-index">02</span></div>
-          <div class="field-row">
-            <div><label for="schedule">Cron 表达式</label><input id="schedule" autocomplete="off" required><p class="hint">五段式 Cron，例如每天 04:00：0 4 * * *</p></div>
-            <div><label for="timezone">时区</label><input id="timezone" list="timezones" required><datalist id="timezones"><option>Asia/Shanghai</option><option>Asia/Hong_Kong</option><option>UTC</option></datalist></div>
+        <section id="policyView" class="view page-view settings-view" hidden>
+          <div class="page-heading"><div><span class="kicker">UPDATE POLICY</span><h1>更新策略</h1><p>控制检查时间、版本选择和启动行为。</p></div><img src="icons/adjustments.svg" alt=""></div>
+          <div class="settings-card">
+            <div class="field-row"><div><label for="schedule">Cron 表达式</label><input id="schedule" autocomplete="off" required><p class="hint">五段式 Cron，例如每天 04:00：0 4 * * *</p></div><div><label for="timezone">时区</label><input id="timezone" list="timezones" required><datalist id="timezones"><option>Asia/Shanghai</option><option>Asia/Hong_Kong</option><option>UTC</option></datalist></div></div>
+            <label class="switch-row"><span><strong>应用启动后立即检查</strong><small>除了定时任务，服务启动时额外运行一次更新。</small></span><input id="runOnStart" type="checkbox"><i></i></label>
+            <label class="switch-row"><span><strong>仅更新稳定版</strong><small>开启时选择最新稳定标签；关闭时选择仓库中最新发布的标签。</small></span><input id="stableOnly" type="checkbox"><i></i></label>
+            <div class="notice"><img src="icons/bolt.svg" alt=""><div><strong>固定 SHA 与 latest 也会检查</strong><span>程序会比较本地运行镜像和 Registry 最新摘要；latest 只拉取并重启，固定标签需要时会同步修改 Compose 文件。</span></div></div>
           </div>
-          <label class="switch-row"><span><strong>应用启动后立即检查</strong><small>除了定时任务，服务启动时额外运行一次更新。</small></span><input id="runOnStart" type="checkbox"><i></i></label>
-          <label class="switch-row"><span><strong>仅更新稳定版</strong><small>开启时选择最新稳定标签；关闭时选择仓库中最新发布的标签。</small></span><input id="stableOnly" type="checkbox"><i></i></label>
-          <div class="notice"><strong>固定 SHA 与 latest 也会检查</strong><span>程序会比较本地运行镜像和 Registry 最新摘要；latest 只拉取重启，固定标签需要时会同步修改 Compose 文件。</span></div>
         </section>
 
-        <section id="registry">
-          <div class="section-heading"><div><p class="eyebrow">REGISTRY</p><h2>Registry 访问</h2><p>查询会跟随镜像地址访问 Docker Hub、GHCR 或 Compose 中配置的其他仓库。</p></div><span class="section-index">03</span></div>
-          <label for="registryProxy">Registry 代理</label>
-          <div class="input-action"><input id="registryProxy" placeholder="http://192.168.1.10:7890"><button id="testProxy" type="button">测试连接</button></div>
-          <p class="hint">支持 http、https、socks5、socks5h。此代理用于程序查询 Registry；Docker 拉取仍使用 Docker 守护进程的代理配置。</p>
-          <div id="proxyResult" class="inline-result" hidden></div>
+        <section id="registryView" class="view page-view settings-view" hidden>
+          <div class="page-heading"><div><span class="kicker">REGISTRY</span><h1>Registry 访问</h1><p>查询会跟随镜像地址访问 Docker Hub、GHCR 或 Compose 中配置的其他仓库。</p></div><img src="icons/world.svg" alt=""></div>
+          <div class="settings-card">
+            <label for="registryProxy">Registry 代理</label>
+            <div class="input-action"><input id="registryProxy" placeholder="http://192.168.1.10:7890"><button id="testProxy" class="secondary" type="button">测试连接</button></div>
+            <p class="hint">支持 http、https、socks5、socks5h。此代理用于程序查询 Registry；Docker 拉取仍使用 Docker 守护进程的代理配置。</p>
+            <div id="proxyResult" class="inline-result" hidden></div>
+          </div>
         </section>
 
-        <section id="notify">
-          <div class="section-heading"><div><p class="eyebrow">NOTIFICATIONS</p><h2>Bark 通知</h2><p>更新成功和任何中间错误都会发送通知。</p></div><span class="section-index">04</span></div>
-          <label class="switch-row"><span><strong>启用 Bark</strong><small>关闭后不会发送更新结果。</small></span><input id="barkEnabled" type="checkbox"><i></i></label>
-          <div class="field-row">
-            <div><label for="barkEndpoint">Endpoint</label><input id="barkEndpoint" placeholder="https://api.day.app"></div>
-            <div><label for="barkGroup">分组</label><input id="barkGroup" placeholder="compose-updater"></div>
+        <section id="notifyView" class="view page-view settings-view" hidden>
+          <div class="page-heading"><div><span class="kicker">NOTIFICATIONS</span><h1>Bark 通知</h1><p>更新成功和任何中间错误都会发送通知。</p></div><img src="icons/bell.svg" alt=""></div>
+          <div class="settings-card">
+            <label class="switch-row"><span><strong>启用 Bark</strong><small>关闭后不会发送更新结果。</small></span><input id="barkEnabled" type="checkbox"><i></i></label>
+            <div class="field-row"><div><label for="barkEndpoint">Endpoint</label><input id="barkEndpoint" placeholder="https://api.day.app"></div><div><label for="barkGroup">分组</label><input id="barkGroup" placeholder="compose-updater"></div></div>
+            <div class="field-row"><div><label for="deviceKey">Device Key</label><input id="deviceKey" type="password" autocomplete="new-password" placeholder="留空则保留现有密钥"><p id="keyState" class="hint">尚未配置密钥</p></div><div><label for="deviceKeyEnv">环境变量名</label><input id="deviceKeyEnv" placeholder="BARK_DEVICE_KEY"><p class="hint">环境变量存在时优先使用环境变量。</p></div></div>
+            <label class="check-row"><input id="clearDeviceKey" type="checkbox">清除已保存的 Device Key</label>
           </div>
-          <div class="field-row">
-            <div><label for="deviceKey">Device Key</label><input id="deviceKey" type="password" autocomplete="new-password" placeholder="留空则保留现有密钥"><p id="keyState" class="hint">尚未配置密钥</p></div>
-            <div><label for="deviceKeyEnv">环境变量名</label><input id="deviceKeyEnv" placeholder="BARK_DEVICE_KEY"><p class="hint">环境变量存在时优先使用环境变量。</p></div>
-          </div>
-          <label class="check-row"><input id="clearDeviceKey" type="checkbox">清除已保存的 Device Key</label>
         </section>
       </form>
     </main>
   </div>
 
-  <footer class="actionbar">
+  <div id="directoryPicker" class="directory-picker" role="dialog" aria-modal="true" aria-labelledby="directoryPickerTitle" hidden>
+    <div class="directory-picker-panel">
+      <div class="picker-title"><h2 id="directoryPickerTitle">选择文件夹</h2><button id="directoryPickerClose" class="icon-action" type="button" aria-label="关闭"><img src="icons/x.svg" alt=""></button></div>
+      <div class="picker-frame">
+        <aside id="directoryLocations" class="picker-locations" aria-label="位置"></aside>
+        <div class="picker-browser">
+          <div class="picker-toolbar"><button id="directoryUp" class="icon-action" type="button" aria-label="上一级"><img src="icons/chevron-left.svg" alt=""></button><div id="directoryCurrent" class="picker-path">/</div></div>
+          <div id="directoryError" class="inline-result error" hidden></div>
+          <div id="directoryList" class="directory-list" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="picker-actions"><button id="directoryPickerCancel" class="secondary" type="button">取消</button><button id="directorySelect" class="primary" type="button" disabled>选择</button></div>
+    </div>
+  </div>
+
+  <footer id="actionbar" class="actionbar" hidden>
     <span id="dirtyText">配置已同步</span>
     <div><button id="reloadButton" class="secondary" type="button">放弃修改</button><button id="saveButton" class="primary" type="submit" form="configForm">保存并重启</button></div>
   </footer>

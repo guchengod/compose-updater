@@ -89,14 +89,19 @@ services:
   compose-updater:
     image: ghcr.io/guchengod/compose-updater:latest
     restart: unless-stopped
+    environment:
+      COMPOSE_UPDATER_WEB_PASSWORD: ${COMPOSE_UPDATER_WEB_PASSWORD:?请先设置运行中心密码}
+    ports:
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.json:/config/config.json:ro
+      - ./config.json:/config/config.json:rw
       - ./data:/data
       - /srv/compose:/srv/compose:rw
+    command: ["web", "-config", "/config/config.json", "-listen", "0.0.0.0:8080"]
 ```
 
-必须使用可写挂载，因为目标标签变化时程序需要修改 Compose 文件。
+必须使用可写挂载，因为目标标签变化时程序需要修改 Compose 文件。`config.json` 也需要可写，运行中心才能保存配置；只使用 `serve` 命令时可以改回只读。
 
 ### 3. 校验并启动
 
@@ -113,6 +118,8 @@ docker compose up -d
 docker compose logs -f compose-updater
 ```
 
+浏览器访问 `http://服务器地址:8080/`，使用 `.env` 中的 `COMPOSE_UPDATER_WEB_USERNAME`（默认 `admin`）和 `COMPOSE_UPDATER_WEB_PASSWORD` 登录。页面与飞牛 FPK 共用同一套运行记录、项目状态、目录选择和配置前端。
+
 立即执行一次真实更新：
 
 ```bash
@@ -128,9 +135,11 @@ docker compose run --rm compose-updater run -config /config/config.json
 - `x86_64` / `amd64`：`ComposeUpdater-vX.Y.Z-x86.fpk`
 - `aarch64` / `arm64`：`ComposeUpdater-vX.Y.Z-arm.fpk`
 
-在飞牛应用中心手动安装后，从桌面打开 **Compose Updater**。管理员可以在页面配置扫描/跳过目录、Cron、稳定版策略、Registry 代理和 Bark；保存成功会原子写入配置并重启更新服务。FPK 使用飞牛统一网关和 Unix Socket，不开放额外端口。
+在飞牛应用中心手动安装后，从桌面打开 **Compose Updater**。首页会展示最近运行、项目结果、执行时间线和技术详情，并支持立即运行；管理员可以通过飞牛风格的 NAS 目录选择器配置扫描/跳过目录，也可以配置 Cron、稳定版策略、Registry 代理和 Bark。保存成功会原子写入配置并重启更新服务。FPK 使用飞牛统一网关和 Unix Socket，不开放额外端口。
 
-FPK 需要访问 Docker Socket 和改写 Compose，因此以 `root` 身份运行。安装步骤、权限说明、页面字段、升级和排障见 [飞牛 fnOS 完整教程](docs/FNOS.md)。原有 Docker 镜像、原生二进制和命令行部署方式不变。
+代理测试访问 Docker Registry `/v2/` 时，Docker Hub 通常返回 `401 Unauthorized` 并提供认证挑战。这表示代理和 Registry 均已连通，飞牛页面会明确显示为预期响应，而不是连接错误。
+
+FPK 需要访问 Docker Socket 和改写 Compose，因此以 `root` 身份运行。安装步骤、权限说明、页面字段、升级和排障见 [飞牛 fnOS 完整教程](docs/FNOS.md)。同一套运行中心也可由 Docker 镜像和原生二进制的 `web` 命令启动；飞牛仍使用统一网关，不额外开放端口。
 
 ## 镜像标签选择策略
 
@@ -255,6 +264,7 @@ compose-updater scan     -config config.json
 compose-updater check    -config config.json
 compose-updater run      -config config.json
 compose-updater serve    -config config.json
+compose-updater web      -config config.json [-listen 127.0.0.1:8080]
 compose-updater version
 ```
 
@@ -265,6 +275,7 @@ compose-updater version
 | `check` | 查询并拉取目标镜像，只报告可用更新 |
 | `run` | 立即执行一次完整更新 |
 | `serve` | 常驻运行并按 Cron 调度 |
+| `web` | 启动调度服务和共享运行中心；默认仅监听 `127.0.0.1:8080` |
 | `version` | 输出版本、提交和构建时间 |
 
 ## Bark 通知
@@ -347,6 +358,10 @@ COMPOSE_UPDATER_INSECURE_REGISTRIES=registry.local:5000,192.168.1.10:5000
 | `DOCKER_COMMAND` | `docker` |
 | `COMPOSE_UPDATER_DATA_DIR` | 配置文件同级 `data` |
 | `COMPOSE_UPDATER_SKIP_FILES` | 空 |
+| `COMPOSE_UPDATER_WEB_LISTEN` | `127.0.0.1:8080` |
+| `COMPOSE_UPDATER_WEB_USERNAME` | `admin` |
+| `COMPOSE_UPDATER_WEB_PASSWORD` | 空；监听非本机地址时必填 |
+| `COMPOSE_UPDATER_RUNTIME_STATE` | 数据目录下的 `runtime.json` |
 | `COMPOSE_UPDATER_CONFIG_TIMEOUT` | `90s` |
 | `COMPOSE_UPDATER_REGISTRY_TIMEOUT` | `2m` |
 | `COMPOSE_UPDATER_PULL_TIMEOUT` | `15m` |
@@ -361,7 +376,7 @@ COMPOSE_UPDATER_INSECURE_REGISTRIES=registry.local:5000,192.168.1.10:5000
 从 [Releases](https://github.com/guchengod/compose-updater/releases/latest) 下载对应平台。Linux amd64 示例：
 
 ```bash
-VERSION=v0.4.1
+VERSION=v0.6.1
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/compose-updater-${VERSION}-linux-amd64.tar.gz"
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS
@@ -389,6 +404,19 @@ docker compose version
 compose-updater validate -config ./config.json
 compose-updater serve -config ./config.json
 ```
+
+需要网页运行中心时，改用：
+
+```bash
+# 仅本机访问，无需密码
+compose-updater web -config ./config.json
+
+# 局域网访问必须设置密码
+COMPOSE_UPDATER_WEB_PASSWORD='请改成强密码' \
+  compose-updater web -config ./config.json -listen 0.0.0.0:8080
+```
+
+然后访问 `http://127.0.0.1:8080/` 或服务器的 `8080` 端口。`web` 会在后台托管同一程序的 `serve` 子进程，因此不要再同时启动另一个 `serve` 实例。
 
 ## 不自动处理的服务
 
@@ -448,29 +476,6 @@ go vet ./...
 make build
 make build-all
 make docker-build
-```
-
-## 自动发布
-
-仓库包含三套 GitHub Actions：
-
-- `CI`：在 Linux、macOS、Windows 上测试，并检查格式与 `go vet`。
-- `Release`：推送 `v*` 标签后构建六个平台压缩包、生成 `SHA256SUMS` 并创建 GitHub Release。
-- `Container`：发布 `linux/amd64`、`linux/arm64` 多架构镜像到 `ghcr.io/guchengod/compose-updater`，同时生成 SBOM 和构建来源证明。
-
-发布新版本：
-
-```bash
-git tag v0.4.1
-git push origin v0.4.1
-```
-
-GHCR 标签规则：
-
-```text
-main 分支：main、sha-<commit>
-稳定版本：0.4.0、0.4、latest、sha-<commit>
-预发布版本：对应语义版本、sha-<commit>，不更新 latest
 ```
 
 ## License
