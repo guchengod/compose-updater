@@ -1,0 +1,17 @@
+{
+  ".url": {
+    "ComposeUpdater.Application": {
+      "title": "{display_name}",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "url": "/app/ComposeUpdater/",
+      "gatewayPrefix": "/app/ComposeUpdater",
+      "gatewaySocket": "compose-updater.sock",
+      "allUsers": false,
+      "control": {
+        "accessPerm": "readonly"
+      }
+    }
+  }
+}

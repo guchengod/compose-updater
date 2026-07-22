@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [v0.5.0] - 2026-07-22
+
+- 新增飞牛 fnOS x86/ARM FPK，包含桌面入口、统一网关和独立生命周期脚本。
+- 新增管理员配置页面，覆盖扫描范围、更新策略、Registry 代理和 Bark 通知配置。
+- 配置保存前严格校验并原子写入，成功后自动重启更新进程；Bark Device Key 仅可写、不回显。
+- 新增独立 FPK 构建与发布工作流，不改变现有 Docker、CLI 和跨平台 Release 构建。
+
 ## [v0.4.1] - 2026-07-22
 
 - 新增 `skip_dirs` 配置；扫描命中指定绝对目录时直接剪枝，不受 `depth` 影响。
@@ -20,3 +27,4 @@
 
 [v0.4.1]: https://github.com/guchengod/compose-updater/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/guchengod/compose-updater/releases/tag/v0.4.0
+[v0.5.0]: https://github.com/guchengod/compose-updater/compare/v0.4.1...v0.5.0
