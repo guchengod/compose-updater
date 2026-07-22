@@ -51,14 +51,20 @@ appcenter-cli install-fpk /path/to/ComposeUpdater-vX.Y.Z-x86.fpk
 
 打开桌面入口后配置：
 
-1. 在“扫描范围”添加 Compose 项目的绝对父目录，例如 `/vol1/docker`。
-2. 在“跳过目录”加入不希望进入的目录，尤其是 Compose Updater 自身、数据库数据目录和备份目录。
+1. 在“扫描范围”点击“选择目录”，从 NAS 文件系统中选择 Compose 项目的绝对父目录，例如 `/vol1/docker`；也可以直接输入绝对路径。
+2. 在“跳过目录”点击“选择目录”，加入不希望进入的目录，尤其是 Compose Updater 自身、数据库数据目录和备份目录。
 3. 设置扫描层级。`0` 只检查根目录，最大为 `5`；跳过目录不受层级影响，会剪掉整个子树。
 4. 设置五段 Cron、时区和是否启动后立即检查。
 5. 选择“仅更新稳定版”。开启是默认策略；关闭后跟随仓库能够确定的最新发布标签。
 6. 如果 NAS 访问 Registry 需要代理，填写 `registry_proxy`。它只影响程序查询标签和摘要；`docker compose pull` 使用 Docker 守护进程自己的代理。
 7. 按需启用 Bark。Device Key 是只写字段：页面不会回显，留空保存会保留原值，也可以明确勾选清除。
 8. 点击“保存并重启”。配置先经过严格校验和原子写入，成功后后台更新进程立即重启。
+
+首页“运行记录”展示 updater 输出的真实结构化事件，包括扫描数量、每个 Compose 项目的更新/跳过/失败结果、耗时和技术日志。记录保存在应用数据目录，默认保留最近 30 次。右上角“立即运行”会触发一轮更新检查；已有任务运行时按钮会禁用，服务端也会拒绝重复触发。
+
+目录按钮打开飞牛风格的双栏选择器：左侧只保留一个“我的文件”和一个“团队文件”入口，并列出存储空间或应用已授权目录；右侧逐层浏览 NAS 文件夹。单击文件夹后选择，双击或点击箭头进入下一级。
+
+Registry 代理测试可能收到 Docker Hub 的 `401 Unauthorized`。这是 Registry `/v2/` 的标准认证挑战，代表代理连接正常；页面会显示“Registry 要求认证（这是预期响应）”。
 
 页面覆盖配置文件的全部公开字段：
 
@@ -118,14 +124,14 @@ tail -n 200 /var/apps/ComposeUpdater/var/fnos-manager.log
 安装飞牛官方 `fnpack` 1.2.3 和 Go 1.26，然后执行：
 
 ```bash
-FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.5.0
+FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.6.1
 ```
 
 产物：
 
 ```text
-build/fnos/ComposeUpdater-v0.5.0-x86.fpk
-build/fnos/ComposeUpdater-v0.5.0-arm.fpk
+build/fnos/ComposeUpdater-v0.6.1-x86.fpk
+build/fnos/ComposeUpdater-v0.6.1-arm.fpk
 ```
 
 构建脚本分别交叉编译 Linux amd64/arm64 的 `compose-updater` 和 `fnos-manager`，再调用官方 `fnpack` 打包。FPK 构建目录位于 `fnos/`，不会改变现有 `make build`、`make build-all` 或 `docker build` 行为。

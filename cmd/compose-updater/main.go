@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/guchengod/compose-updater/internal/composefile"
 	"github.com/guchengod/compose-updater/internal/config"
 	"github.com/guchengod/compose-updater/internal/cronexpr"
+	"github.com/guchengod/compose-updater/internal/fnos"
 	filelock "github.com/guchengod/compose-updater/internal/lock"
 	"github.com/guchengod/compose-updater/internal/notify"
 	"github.com/guchengod/compose-updater/internal/platform"
@@ -45,6 +48,11 @@ func run(args []string) int {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", envOr("COMPOSE_UPDATER_CONFIG", "config.json"), "配置文件路径")
+	forceRunOnStart := fs.Bool("run-on-start", false, "serve 启动后强制立即运行一次")
+	webListen := fs.String("listen", envOr("COMPOSE_UPDATER_WEB_LISTEN", "127.0.0.1:8080"), "web 监听地址")
+	webUsername := fs.String("web-username", envOr("COMPOSE_UPDATER_WEB_USERNAME", "admin"), "web 登录用户名")
+	webPassword := fs.String("web-password", envOr("COMPOSE_UPDATER_WEB_PASSWORD", ""), "web 登录密码（推荐使用环境变量）")
+	runtimeState := fs.String("runtime-state", envOr("COMPOSE_UPDATER_RUNTIME_STATE", ""), "运行记录文件路径")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -55,6 +63,12 @@ func run(args []string) int {
 	}
 	logger := newLogger(cfg.LogLevel).With("version", version, "node", cfg.NodeName)
 	slog.SetDefault(logger)
+	if command == "web" {
+		if strings.TrimSpace(*runtimeState) == "" {
+			*runtimeState = filepath.Join(filepath.Dir(cfg.LockFile), "runtime.json")
+		}
+		return runWeb(*configPath, cfg, logger, *webListen, *webUsername, *webPassword, *runtimeState)
+	}
 	notifier, err := buildNotifier(cfg)
 	if err != nil {
 		logger.Error("notifier_init_failed", "error", err)
@@ -78,12 +92,39 @@ func run(args []string) int {
 	case "run":
 		return runOnce(cfg, engine, logger, true)
 	case "serve":
-		return serve(cfg, engine, logger)
+		return serve(cfg, engine, logger, *forceRunOnStart)
 	default:
 		logger.Error("unknown_command", "command", command)
 		printUsage(os.Stderr)
 		return 2
 	}
+}
+
+func runWeb(configPath string, cfg *config.Config, logger *slog.Logger, listen, username, password, runtimePath string) int {
+	executable, err := os.Executable()
+	if err != nil {
+		logger.Error("web_executable_lookup_failed", "error", err)
+		return 1
+	}
+	ctx, stop := platform.NotifyContext(context.Background())
+	defer stop()
+	runtimeStore := fnos.NewRuntimeStore(runtimePath, logger)
+	supervisor := fnos.NewSupervisor(executable, configPath, logger, runtimeStore)
+	go supervisor.Run(ctx)
+	defaultPath := filepath.Dir(configPath)
+	if len(cfg.Paths) > 0 {
+		defaultPath = cfg.Paths[0]
+	}
+	server := fnos.NewServer(fnos.ServerOptions{
+		ConfigPath: configPath, DefaultPath: defaultPath, Version: version,
+		AuthorizedPaths: cfg.Paths, Supervisor: supervisor, Logger: logger,
+	})
+	logger.Info("web_started", "listen", listen, "runtime_state", runtimePath)
+	if err := server.ServeStandalone(ctx, listen, username, password); err != nil {
+		logger.Error("web_failed", "error", err)
+		return 1
+	}
+	return 0
 }
 
 func validate(engine *updater.Updater, logger *slog.Logger) int {
@@ -133,7 +174,7 @@ func runOnce(cfg *config.Config, engine *updater.Updater, logger *slog.Logger, a
 	return 0
 }
 
-func serve(cfg *config.Config, engine *updater.Updater, logger *slog.Logger) int {
+func serve(cfg *config.Config, engine *updater.Updater, logger *slog.Logger, forceRunOnStart bool) int {
 	lock, err := filelock.Acquire(cfg.LockFile)
 	if err != nil {
 		if errors.Is(err, filelock.ErrAlreadyLocked) {
@@ -161,8 +202,8 @@ func serve(cfg *config.Config, engine *updater.Updater, logger *slog.Logger) int
 		engine.NotifyFailure("update", fmt.Errorf("解析调度配置: %w", err))
 		return 1
 	}
-	logger.Info("scheduler_started", "schedule", cfg.Schedule, "timezone", cfg.Timezone, "run_on_start", cfg.RunOnStart)
-	if cfg.RunOnStart {
+	logger.Info("scheduler_started", "schedule", cfg.Schedule, "timezone", cfg.Timezone, "run_on_start", cfg.RunOnStart || forceRunOnStart)
+	if cfg.RunOnStart || forceRunOnStart {
 		engine.Run(ctx, true)
 	}
 	for {
@@ -243,5 +284,6 @@ func printUsage(out *os.File) {
   compose-updater check    -config config.json
   compose-updater run      -config config.json
   compose-updater serve    -config config.json
+  compose-updater web      -config config.json [-listen 127.0.0.1:8080]
   compose-updater version`)
 }

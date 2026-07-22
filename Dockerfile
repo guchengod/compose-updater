@@ -27,5 +27,6 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /out/compose-updater /usr/local/bin/compose-updater
 
 USER root
+EXPOSE 8080
 ENTRYPOINT ["compose-updater"]
 CMD ["serve", "-config", "/config/config.json"]

@@ -9,9 +9,14 @@ services:
       LOG_LEVEL: info
       COMPOSE_UPDATER_DATA_DIR: /data
       COMPOSE_UPDATER_SKIP_FILES: /opt/compose-updater/compose.yml
+      COMPOSE_UPDATER_WEB_USERNAME: ${COMPOSE_UPDATER_WEB_USERNAME:-admin}
+      COMPOSE_UPDATER_WEB_PASSWORD: ${COMPOSE_UPDATER_WEB_PASSWORD:?请在 .env 中设置运行中心密码}
+    ports:
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.json:/config/config.json:ro
+      # 运行中心需要写入配置；不使用页面配置时可改回 :ro 并使用 serve 命令。
+      - ./config.json:/config/config.json:rw
       - ./data:/data
 
       # 扫描目录必须可写，因为目标标签变化时会修改 Compose 文件。
@@ -22,9 +27,11 @@ services:
       # 私有 Registry 可选：挂载 Docker 登录凭据。
       # - /root/.docker/config.json:/root/.docker/config.json:ro
     command:
-      - serve
+      - web
       - -config
       - /config/config.json
+      - -listen
+      - 0.0.0.0:8080
     logging:
       driver: json-file
       options:

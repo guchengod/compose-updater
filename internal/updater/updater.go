@@ -112,11 +112,13 @@ func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
 		mode = "update"
 	}
 	summary := RunSummary{Mode: mode, Node: u.cfg.NodeName, StartedAt: time.Now()}
+	u.logger.Info("update_cycle_started", "mode", mode)
 	files, err := u.Discover()
 	if err != nil {
 		summary.ProjectsFailed = 1
 		summary.Results = append(summary.Results, ProjectResult{Status: "failed", Error: err.Error()})
 		summary.FinishedAt = time.Now()
+		u.logSummary(summary)
 		u.notifySummary(ctx, summary)
 		return summary
 	}
@@ -130,6 +132,15 @@ func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
 		}
 		summary.ProjectsChecked++
 		result := u.runProject(ctx, composeFile, apply)
+		u.logger.Info("project_check_finished",
+			"compose_file", result.ComposeFile,
+			"project", result.Project,
+			"status", result.Status,
+			"services", changedServiceNames(result.ServiceChanges),
+			"version_changes", len(result.VersionChanges),
+			"duration_ms", result.DurationMS,
+			"error", result.Error,
+		)
 		summary.Results = append(summary.Results, result)
 		switch result.Status {
 		case "updated", "config_updated":
@@ -145,6 +156,12 @@ func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
 		}
 	}
 	summary.FinishedAt = time.Now()
+	u.logSummary(summary)
+	u.notifySummary(ctx, summary)
+	return summary
+}
+
+func (u *Updater) logSummary(summary RunSummary) {
 	u.logger.Info("update_cycle_finished",
 		"mode", summary.Mode,
 		"compose_files_discovered", summary.ComposeFilesDiscovered,
@@ -155,8 +172,15 @@ func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
 		"services_updated", summary.ServicesUpdated,
 		"duration_ms", summary.FinishedAt.Sub(summary.StartedAt).Milliseconds(),
 	)
-	u.notifySummary(ctx, summary)
-	return summary
+}
+
+func changedServiceNames(changes []ServiceChange) []string {
+	result := make([]string, 0, len(changes))
+	for _, change := range changes {
+		result = append(result, change.Service)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // NotifyFailure reports failures that happen outside an update cycle, such as

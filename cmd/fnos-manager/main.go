@@ -42,6 +42,7 @@ func run(args []string) error {
 	configPath := fs.String("config", envOr("TRIM_PKGETC", ".")+"/config.json", "config path")
 	socketPath := fs.String("socket", envOr("TRIM_APPDEST", ".")+"/compose-updater.sock", "gateway unix socket")
 	updaterPath := fs.String("updater", envOr("TRIM_APPDEST", ".")+"/bin/compose-updater", "updater binary")
+	runtimePath := fs.String("runtime-state", envOr("TRIM_PKGVAR", ".")+"/runtime.json", "runtime history path")
 	listenAddress := fs.String("listen", "", "local development TCP address")
 	devAdmin := fs.Bool("dev-admin", false, "inject an admin identity for loopback development")
 	if err := fs.Parse(args); err != nil {
@@ -55,7 +56,8 @@ func run(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	supervisor := fnos.NewSupervisor(*updaterPath, *configPath, logger)
+	runtimeStore := fnos.NewRuntimeStore(*runtimePath, logger)
+	supervisor := fnos.NewSupervisor(*updaterPath, *configPath, logger, runtimeStore)
 	go supervisor.Run(ctx)
 	server := fnos.NewServer(fnos.ServerOptions{
 		ConfigPath: *configPath, DefaultPath: filepath.Dir(*socketPath), Version: version,
