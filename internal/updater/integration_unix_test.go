@@ -45,6 +45,30 @@ func TestLatestTagPullsAndRecreatesWithoutEditingCompose(t *testing.T) {
 	}
 }
 
+func TestCustomComposeProjectNameIsResolvedFromConfigFile(t *testing.T) {
+	root := t.TempDir()
+	composePath := filepath.Join(root, "compose.yml")
+	mustWriteFile(t, composePath, "services:\n  web:\n    image: example/web:latest\n", 0o600)
+	cfg := loadIntegrationConfig(t, root)
+	statePath, logPath := installFakeDocker(t, cfg, root)
+	mustWriteFile(t, statePath, "sha256:old\n", 0o600)
+	t.Setenv("FAKE_COMPOSE_LS", `[{"Name":"myflatnas","Status":"running(1)","ConfigFiles":`+jsonQuote(composePath)+`}]`)
+	t.Setenv("FAKE_REQUIRE_PROJECT_NAME", "myflatnas")
+
+	engine := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), notify.Noop{})
+	summary := engine.Run(context.Background(), true)
+	if summary.ProjectsFailed != 0 || summary.ProjectsUpdated != 1 || summary.ServicesUpdated != 1 {
+		t.Fatalf("custom project was not updated: %+v", summary)
+	}
+	if got := summary.Results[0].Project; got != "myflatnas" {
+		t.Fatalf("project = %q, want myflatnas", got)
+	}
+	calls, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(calls), "compose --project-name myflatnas --project-directory") {
+		t.Fatalf("resolved project name not applied to compose commands:\n%s", calls)
+	}
+}
+
 func TestNumericTagUpdatesComposeAndRecreates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/team/app/tags/list" {
@@ -202,18 +226,28 @@ if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then echo sha256:new; exit 0; fi
 if [ "$1" = "pull" ]; then echo pulled; exit 0; fi
 if [ "$1" = "compose" ]; then
   compose_file=""
+  project_name="test"
   previous=""
   for arg in "$@"; do
     if [ "$previous" = "-f" ]; then compose_file="$arg"; fi
+    if [ "$previous" = "--project-name" ]; then project_name="$arg"; fi
     previous="$arg"
   done
   case "$*" in
-    *' config --format json'*)
-      image=$(sed -n 's/^[[:space:]]*image:[[:space:]]*["'"'"']\{0,1\}\([^ "'"'"'#]*\).*/\1/p' "$compose_file" | head -1)
-      printf '{"name":"test","services":{"web":{"image":"%s"}}}\n' "$image"
+    *' ls --all --format json'*)
+      printf '%s\n' "${FAKE_COMPOSE_LS:-[]}"
       exit 0
       ;;
-    *' ps -q web'*) echo c1; exit 0 ;;
+    *' config --format json'*)
+      image=$(sed -n 's/^[[:space:]]*image:[[:space:]]*["'"'"']\{0,1\}\([^ "'"'"'#]*\).*/\1/p' "$compose_file" | head -1)
+      printf '{"name":"%s","services":{"web":{"image":"%s"}}}\n' "$project_name" "$image"
+      exit 0
+      ;;
+    *' ps -q web'*)
+      if [ -n "${FAKE_REQUIRE_PROJECT_NAME:-}" ] && [ "$project_name" != "$FAKE_REQUIRE_PROJECT_NAME" ]; then exit 0; fi
+      echo c1
+      exit 0
+      ;;
     *' pull '*) echo pulled; exit 0 ;;
     *' up -d '*) echo sha256:new > "$state"; echo updated; exit 0 ;;
   esac

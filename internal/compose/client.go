@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -18,7 +19,14 @@ type Client struct {
 	dockerEnv     map[string]string
 	composeFile   string
 	workingDir    string
+	projectName   string
 	runner        execx.Runner
+}
+
+type listedProject struct {
+	Name        string `json:"Name"`
+	Status      string `json:"Status"`
+	ConfigFiles string `json:"ConfigFiles"`
 }
 
 func NewClient(docker config.DockerConfig, composeFile string, runner execx.Runner) *Client {
@@ -29,6 +37,38 @@ func NewClient(docker config.DockerConfig, composeFile string, runner execx.Runn
 		workingDir:    filepath.Dir(composeFile),
 		runner:        runner,
 	}
+}
+
+// ResolveProjectName finds the existing Compose project associated with this
+// configuration file. This matters when a project was created with -p/--project-name
+// (for example by a NAS UI), because Compose otherwise derives a different name
+// from the directory and cannot see the already-running containers.
+func (c *Client) ResolveProjectName(ctx context.Context) (string, execx.Result, error) {
+	result, err := c.runner.Run(ctx, c.workingDir, c.dockerEnv, c.dockerCommand,
+		"compose", "ls", "--all", "--format", "json")
+	if err != nil {
+		return "", result, err
+	}
+	var projects []listedProject
+	if err := json.Unmarshal([]byte(result.Stdout), &projects); err != nil {
+		return "", result, fmt.Errorf("解析 docker compose ls JSON: %w", err)
+	}
+
+	matches := make([]string, 0, 1)
+	for _, project := range projects {
+		if strings.TrimSpace(project.Name) == "" || !containsComposeFile(project.ConfigFiles, c.composeFile, c.workingDir) {
+			continue
+		}
+		matches = appendUnique(matches, strings.TrimSpace(project.Name))
+	}
+	if len(matches) == 0 {
+		return "", result, nil
+	}
+	if len(matches) > 1 {
+		return "", result, fmt.Errorf("Compose 文件 %q 同时匹配多个项目: %s", c.composeFile, strings.Join(matches, ", "))
+	}
+	c.projectName = matches[0]
+	return c.projectName, result, nil
 }
 
 func (c *Client) ParseConfig(ctx context.Context) (Model, execx.Result, error) {
@@ -79,5 +119,43 @@ func (c *Client) ContainerIDs(ctx context.Context, service string) ([]string, ex
 }
 
 func (c *Client) baseArgs() []string {
-	return []string{"compose", "--project-directory", c.workingDir, "-f", c.composeFile}
+	args := []string{"compose"}
+	if c.projectName != "" {
+		args = append(args, "--project-name", c.projectName)
+	}
+	return append(args, "--project-directory", c.workingDir, "-f", c.composeFile)
+}
+
+func containsComposeFile(configFiles, target, workingDir string) bool {
+	for _, candidate := range strings.Split(configFiles, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if !filepath.IsAbs(candidate) {
+			candidate = filepath.Join(workingDir, candidate)
+		}
+		if samePath(candidate, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func samePath(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
