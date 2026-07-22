@@ -209,7 +209,7 @@ function renderRunHistory() {
 function metric(label, value, unit = '', iconName = 'list-check') {
   const item = element('div', 'metric');
   const metricIcon = element('span', 'metric-icon'); metricIcon.append(icon(iconName));
-  const copy = document.createElement('div'); copy.append(element('span', '', label), element('strong', '', String(value ?? 0)));
+  const copy = element('div', 'metric-copy'); copy.append(element('span', '', label), element('strong', '', String(value ?? 0)));
   if (unit) copy.append(element('small', '', unit));
   item.append(metricIcon, copy);
   return item;
