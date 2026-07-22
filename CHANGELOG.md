@@ -2,6 +2,10 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [v0.4.1] - 2026-07-22
+
+- 新增 `skip_dirs` 配置；扫描命中指定绝对目录时直接剪枝，不受 `depth` 影响。
+
 ## [v0.4.0] - 2026-07-22
 
 首次公开发布：
@@ -14,4 +18,5 @@
 - Bark 可用更新、成功和失败通知。
 - 提供六个平台原生二进制和双架构 GHCR 镜像。
 
+[v0.4.1]: https://github.com/guchengod/compose-updater/compare/v0.4.0...v0.4.1
 [v0.4.0]: https://github.com/guchengod/compose-updater/releases/tag/v0.4.0

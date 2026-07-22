@@ -34,6 +34,7 @@ var (
 type Config struct {
 	Version       int        `json:"version"`
 	Paths         []string   `json:"paths"`
+	SkipDirs      []string   `json:"skip_dirs"`
 	Depth         int        `json:"depth"`
 	Schedule      string     `json:"schedule"`
 	Timezone      string     `json:"timezone"`
@@ -60,6 +61,7 @@ type Config struct {
 type fileConfig struct {
 	Version       int        `json:"version"`
 	Paths         []string   `json:"paths"`
+	SkipDirs      []string   `json:"skip_dirs"`
 	Depth         *int       `json:"depth"`
 	Schedule      string     `json:"schedule"`
 	Timezone      string     `json:"timezone"`
@@ -107,6 +109,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		Version:       raw.Version,
 		Paths:         raw.Paths,
+		SkipDirs:      raw.SkipDirs,
 		Depth:         1,
 		Schedule:      strings.TrimSpace(raw.Schedule),
 		Timezone:      strings.TrimSpace(raw.Timezone),
@@ -196,6 +199,26 @@ func (c *Config) normalize(configPath string) error {
 		normalized = append(normalized, root)
 	}
 	c.Paths = normalized
+
+	skipSeen := make(map[string]struct{}, len(c.SkipDirs))
+	normalizedSkipDirs := make([]string, 0, len(c.SkipDirs))
+	for _, skipDir := range c.SkipDirs {
+		skipDir = strings.TrimSpace(skipDir)
+		if skipDir == "" {
+			return errors.New("skip_dirs 不能包含空路径")
+		}
+		if !filepath.IsAbs(skipDir) {
+			return fmt.Errorf("跳过目录必须是绝对路径: %q", skipDir)
+		}
+		skipDir = filepath.Clean(skipDir)
+		key := normalizePath(skipDir)
+		if _, ok := skipSeen[key]; ok {
+			continue
+		}
+		skipSeen[key] = struct{}{}
+		normalizedSkipDirs = append(normalizedSkipDirs, skipDir)
+	}
+	c.SkipDirs = normalizedSkipDirs
 
 	c.NodeName = strings.TrimSpace(os.Getenv("NODE_NAME"))
 	if c.NodeName == "" {
