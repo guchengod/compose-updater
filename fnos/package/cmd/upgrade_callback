@@ -1,0 +1,5 @@
+#!/bin/bash
+
+"${TRIM_APPDEST}/bin/fnos-manager" init-config \
+    -config "${TRIM_PKGETC}/config.json" \
+    -default-path "${TRIM_APPDEST}"

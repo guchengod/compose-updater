@@ -4,7 +4,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)
 
-.PHONY: test vet build build-all clean docker-build
+.PHONY: test vet build build-all fnos-build clean docker-build
 
 test:
 	go test ./...
@@ -17,6 +17,9 @@ build:
 
 build-all:
 	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_DATE=$(BUILD_DATE) ./scripts/build-all.sh
+
+fnos-build:
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_DATE=$(BUILD_DATE) ./scripts/build-fnos.sh
 
 clean:
 	rm -rf build

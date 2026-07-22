@@ -1,0 +1,57 @@
+#!/bin/bash
+
+PID_FILE="${TRIM_PKGVAR}/fnos-manager.pid"
+LOG_FILE="${TRIM_PKGVAR}/fnos-manager.log"
+MANAGER="${TRIM_APPDEST}/bin/fnos-manager"
+CONFIG="${TRIM_PKGETC}/config.json"
+SOCKET="${TRIM_APPDEST}/compose-updater.sock"
+UPDATER="${TRIM_APPDEST}/bin/compose-updater"
+
+is_running() {
+    [ -r "${PID_FILE}" ] || return 1
+    pid="$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')"
+    [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null
+}
+
+start_app() {
+    if is_running; then
+        return 0
+    fi
+    rm -f "${PID_FILE}" "${SOCKET}"
+    "${MANAGER}" -config "${CONFIG}" -socket "${SOCKET}" -updater "${UPDATER}" >>"${LOG_FILE}" 2>&1 &
+    printf '%s' "$!" >"${PID_FILE}"
+    sleep 1
+    if ! is_running; then
+        rm -f "${PID_FILE}"
+        return 1
+    fi
+    return 0
+}
+
+stop_app() {
+    if ! is_running; then
+        rm -f "${PID_FILE}" "${SOCKET}"
+        return 0
+    fi
+    pid="$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')"
+    kill -TERM "${pid}" 2>/dev/null || true
+    count=0
+    while kill -0 "${pid}" 2>/dev/null && [ "${count}" -lt 15 ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+    if kill -0 "${pid}" 2>/dev/null; then
+        kill -KILL "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${PID_FILE}" "${SOCKET}"
+    return 0
+}
+
+case "$1" in
+    start) start_app ;;
+    stop) stop_app ;;
+    status)
+        if is_running; then exit 0; else rm -f "${PID_FILE}"; exit 3; fi
+        ;;
+    *) exit 1 ;;
+esac

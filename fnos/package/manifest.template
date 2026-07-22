@@ -1,0 +1,14 @@
+appname               = ComposeUpdater
+version               = @VERSION@
+display_name          = Compose Updater
+desc                  = 自动发现、检查并更新飞牛上的 Docker Compose 项目
+platform              = @PLATFORM@
+source                = thirdparty
+maintainer            = guchengod
+distributor           = guchengod
+maintainer_url        = https://github.com/guchengod/compose-updater
+distributor_url       = https://github.com/guchengod/compose-updater
+desktop_uidir         = ui
+desktop_applaunchname = ComposeUpdater.Application
+ctl_stop              = true
+checkport              = false

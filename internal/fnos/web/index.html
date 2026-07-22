@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Compose Updater</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.png" alt="" width="42" height="42">
+      <div><strong>Compose Updater</strong><span>飞牛应用配置中心</span></div>
+    </div>
+    <div class="status-line">
+      <span id="runningBadge" class="badge muted">正在连接</span>
+      <span id="versionText">版本 —</span>
+      <span id="nextRunText">下次运行 —</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="配置导航">
+      <a class="active" href="#scan"><span>01</span>扫描范围</a>
+      <a href="#policy"><span>02</span>更新策略</a>
+      <a href="#registry"><span>03</span>Registry</a>
+      <a href="#notify"><span>04</span>通知设置</a>
+    </aside>
+
+    <main>
+      <div id="message" class="message" hidden></div>
+      <form id="configForm">
+        <section id="scan">
+          <div class="section-heading"><div><p class="eyebrow">SCAN SCOPE</p><h1>扫描范围</h1><p>选择包含 Compose 项目的目录，并排除无需检查的子目录。</p></div><span class="section-index">01</span></div>
+          <label>扫描目录 <span class="required">必填</span></label>
+          <div id="paths" class="path-list"></div>
+          <button class="text-button" type="button" data-add="paths">＋ 添加扫描目录</button>
+          <p id="authorizedHint" class="hint"></p>
+
+          <label>跳过目录</label>
+          <div id="skipDirs" class="path-list"></div>
+          <button class="text-button" type="button" data-add="skipDirs">＋ 添加跳过目录</button>
+
+          <div class="field-row compact">
+            <div><label for="depth">扫描层级</label><input id="depth" type="number" min="0" max="5" required><p class="hint">0–5；0 仅检查扫描目录本身。</p></div>
+          </div>
+        </section>
+
+        <section id="policy">
+          <div class="section-heading"><div><p class="eyebrow">UPDATE POLICY</p><h2>更新策略</h2><p>控制检查时间、版本选择和启动行为。</p></div><span class="section-index">02</span></div>
+          <div class="field-row">
+            <div><label for="schedule">Cron 表达式</label><input id="schedule" autocomplete="off" required><p class="hint">五段式 Cron，例如每天 04:00：0 4 * * *</p></div>
+            <div><label for="timezone">时区</label><input id="timezone" list="timezones" required><datalist id="timezones"><option>Asia/Shanghai</option><option>Asia/Hong_Kong</option><option>UTC</option></datalist></div>
+          </div>
+          <label class="switch-row"><span><strong>应用启动后立即检查</strong><small>除了定时任务，服务启动时额外运行一次更新。</small></span><input id="runOnStart" type="checkbox"><i></i></label>
+          <label class="switch-row"><span><strong>仅更新稳定版</strong><small>开启时选择最新稳定标签；关闭时选择仓库中最新发布的标签。</small></span><input id="stableOnly" type="checkbox"><i></i></label>
+          <div class="notice"><strong>固定 SHA 与 latest 也会检查</strong><span>程序会比较本地运行镜像和 Registry 最新摘要；latest 只拉取重启，固定标签需要时会同步修改 Compose 文件。</span></div>
+        </section>
+
+        <section id="registry">
+          <div class="section-heading"><div><p class="eyebrow">REGISTRY</p><h2>Registry 访问</h2><p>查询会跟随镜像地址访问 Docker Hub、GHCR 或 Compose 中配置的其他仓库。</p></div><span class="section-index">03</span></div>
+          <label for="registryProxy">Registry 代理</label>
+          <div class="input-action"><input id="registryProxy" placeholder="http://192.168.1.10:7890"><button id="testProxy" type="button">测试连接</button></div>
+          <p class="hint">支持 http、https、socks5、socks5h。此代理用于程序查询 Registry；Docker 拉取仍使用 Docker 守护进程的代理配置。</p>
+          <div id="proxyResult" class="inline-result" hidden></div>
+        </section>
+
+        <section id="notify">
+          <div class="section-heading"><div><p class="eyebrow">NOTIFICATIONS</p><h2>Bark 通知</h2><p>更新成功和任何中间错误都会发送通知。</p></div><span class="section-index">04</span></div>
+          <label class="switch-row"><span><strong>启用 Bark</strong><small>关闭后不会发送更新结果。</small></span><input id="barkEnabled" type="checkbox"><i></i></label>
+          <div class="field-row">
+            <div><label for="barkEndpoint">Endpoint</label><input id="barkEndpoint" placeholder="https://api.day.app"></div>
+            <div><label for="barkGroup">分组</label><input id="barkGroup" placeholder="compose-updater"></div>
+          </div>
+          <div class="field-row">
+            <div><label for="deviceKey">Device Key</label><input id="deviceKey" type="password" autocomplete="new-password" placeholder="留空则保留现有密钥"><p id="keyState" class="hint">尚未配置密钥</p></div>
+            <div><label for="deviceKeyEnv">环境变量名</label><input id="deviceKeyEnv" placeholder="BARK_DEVICE_KEY"><p class="hint">环境变量存在时优先使用环境变量。</p></div>
+          </div>
+          <label class="check-row"><input id="clearDeviceKey" type="checkbox">清除已保存的 Device Key</label>
+        </section>
+      </form>
+    </main>
+  </div>
+
+  <footer class="actionbar">
+    <span id="dirtyText">配置已同步</span>
+    <div><button id="reloadButton" class="secondary" type="button">放弃修改</button><button id="saveButton" class="primary" type="submit" form="configForm">保存并重启</button></div>
+  </footer>
+  <script src="app.js" defer></script>
+</body>
+</html>

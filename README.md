@@ -18,6 +18,7 @@
 - 原子修改 Compose、自动备份、配置校验、失败恢复和健康稳定性检查。
 - Bark 成功、可用更新和失败通知。
 - Registry Bearer/Basic 鉴权、Docker 凭据和 HTTP/SOCKS5 查询代理。
+- 飞牛 fnOS 原生 FPK、桌面入口和管理员配置页面。
 - Linux、macOS、Windows 原生二进制，以及 `linux/amd64`、`linux/arm64` GHCR 镜像。
 
 > [!WARNING]
@@ -119,6 +120,17 @@ docker compose run --rm compose-updater run -config /config/config.json
 ```
 
 `check` 会拉取镜像用于比较，但不会修改 Compose 或重建容器。`run` 会应用更新。
+
+## 快速开始：飞牛 fnOS FPK
+
+从 [GitHub Releases](https://github.com/guchengod/compose-updater/releases/latest) 按 NAS 架构下载 FPK：
+
+- `x86_64` / `amd64`：`ComposeUpdater-vX.Y.Z-x86.fpk`
+- `aarch64` / `arm64`：`ComposeUpdater-vX.Y.Z-arm.fpk`
+
+在飞牛应用中心手动安装后，从桌面打开 **Compose Updater**。管理员可以在页面配置扫描/跳过目录、Cron、稳定版策略、Registry 代理和 Bark；保存成功会原子写入配置并重启更新服务。FPK 使用飞牛统一网关和 Unix Socket，不开放额外端口。
+
+FPK 需要访问 Docker Socket 和改写 Compose，因此以 `root` 身份运行。安装步骤、权限说明、页面字段、升级和排障见 [飞牛 fnOS 完整教程](docs/FNOS.md)。原有 Docker 镜像、原生二进制和命令行部署方式不变。
 
 ## 镜像标签选择策略
 
