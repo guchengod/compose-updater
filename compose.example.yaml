@@ -16,7 +16,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # 运行中心需要写入配置；不使用页面配置时可改回 :ro 并使用 serve 命令。
-      - ./config.json:/config/config.json:rw
+      - ./config:/config:rw
       - ./data:/data
 
       # 扫描目录必须可写，因为目标标签变化时会修改 Compose 文件。
