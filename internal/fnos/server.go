@@ -23,6 +23,7 @@ import (
 
 	"github.com/guchengod/compose-updater/internal/config"
 	"github.com/guchengod/compose-updater/internal/cronexpr"
+	"github.com/guchengod/compose-updater/internal/notify"
 )
 
 //go:embed web
@@ -182,6 +183,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.requireAdminMutation(w, r, s.runNow)
 	case r.URL.Path == "/api/proxy-test" && r.Method == http.MethodPost:
 		s.requireAdminMutation(w, r, s.testProxy)
+	case r.URL.Path == "/api/bark-test" && r.Method == http.MethodPost:
+		s.requireAdminMutation(w, r, s.testBark)
 	case r.Method == http.MethodGet || r.Method == http.MethodHead:
 		s.assets.ServeHTTP(w, r)
 	default:
@@ -424,6 +427,58 @@ func (s *Server) testProxy(w http.ResponseWriter, r *http.Request) {
 		"ok": true, "status": response.Status, "status_code": response.StatusCode,
 		"registry_auth_required": authRequired, "message": message,
 	})
+}
+
+func (s *Server) testBark(w http.ResponseWriter, r *http.Request) {
+	var request BarkSettings
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var stored Settings
+	if data, err := os.ReadFile(s.configPath); err == nil {
+		_ = json.Unmarshal(data, &stored)
+	}
+	endpoint := defaultString(strings.TrimSpace(request.Endpoint), strings.TrimSpace(stored.Bark.Endpoint))
+	if endpoint == "" {
+		endpoint = "https://api.day.app/push"
+	}
+	group := defaultString(strings.TrimSpace(request.Group), strings.TrimSpace(stored.Bark.Group))
+	if group == "" {
+		group = "compose-updater"
+	}
+	deviceKeyEnv := defaultString(strings.TrimSpace(request.DeviceKeyEnv), strings.TrimSpace(stored.Bark.DeviceKeyEnv))
+	if deviceKeyEnv == "" {
+		deviceKeyEnv = "BARK_DEVICE_KEY"
+	}
+	deviceKey := strings.TrimSpace(request.DeviceKey)
+	if deviceKey == "" && !request.ClearKey {
+		deviceKey = strings.TrimSpace(stored.Bark.DeviceKey)
+	}
+	if deviceKey == "" {
+		deviceKey = strings.TrimSpace(os.Getenv(deviceKeyEnv))
+	}
+	if deviceKey == "" {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("无法发送测试通知：Device Key 和环境变量 %s 均为空", deviceKeyEnv))
+		return
+	}
+
+	sender, err := notify.NewBark(config.BarkConfig{
+		Enabled: true, Endpoint: endpoint, DeviceKey: deviceKey, DeviceKeyEnv: deviceKeyEnv, Group: group,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	testCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := sender.Send(testCtx, "Compose Updater 通知测试", "这是一条测试消息，表示 Bark 通知配置可以正常发送。", "active"); err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("Bark 测试通知发送失败: %v", err))
+		return
+	}
+	s.logger.Info("bark_test_sent", "user", r.Header.Get("X-Trim-Username"))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Bark 测试通知已发送，请检查接收设备"})
 }
 
 func proxyTestMessage(statusCode int) (string, bool) {

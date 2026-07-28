@@ -155,6 +155,49 @@ func TestRuntimeAPIRequiresAdminAndReturnsSupervisorState(t *testing.T) {
 	}
 }
 
+func TestBarkTestUsesStoredDeviceKey(t *testing.T) {
+	var received map[string]any
+	barkServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"code": 200, "message": "success"})
+	}))
+	defer barkServer.Close()
+
+	server, configPath := newTestServer(t)
+	settings, err := LoadSettings(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Bark.DeviceKey = "stored-secret"
+	if err := SaveSettings(configPath, settings); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"endpoint":` + quoteJSON(t, barkServer.URL) + `,"device_key":"","device_key_env":"BARK_DEVICE_KEY","group":"test-group"}`
+	request := httptest.NewRequest(http.MethodPost, "/api/bark-test", strings.NewReader(body))
+	request.Header.Set("X-Trim-Isadmin", "true")
+	request.Header.Set("X-Compose-Updater", "web")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	if received["device_key"] != "stored-secret" || received["group"] != "test-group" || received["title"] != "Compose Updater 通知测试" {
+		t.Fatalf("unexpected Bark payload: %#v", received)
+	}
+}
+
+func quoteJSON(t *testing.T, value string) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
 func TestStandaloneHandlerRequiresConfiguredBasicAuth(t *testing.T) {
 	server, _ := newTestServer(t)
 	handler := server.standaloneHandler("operator", "secret")

@@ -62,13 +62,20 @@ type RuntimeRun struct {
 }
 
 type RuntimeProject struct {
-	ComposeFile    string   `json:"compose_file"`
-	Project        string   `json:"project,omitempty"`
-	Status         string   `json:"status"`
-	Services       []string `json:"services,omitempty"`
-	VersionChanges int      `json:"version_changes,omitempty"`
-	DurationMS     int64    `json:"duration_ms,omitempty"`
-	Error          string   `json:"error,omitempty"`
+	ComposeFile    string                 `json:"compose_file"`
+	Project        string                 `json:"project,omitempty"`
+	Status         string                 `json:"status"`
+	Services       []string               `json:"services,omitempty"`
+	VersionChanges int                    `json:"version_changes,omitempty"`
+	Versions       []RuntimeVersionChange `json:"versions,omitempty"`
+	DurationMS     int64                  `json:"duration_ms,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+}
+
+type RuntimeVersionChange struct {
+	Service string `json:"service"`
+	OldTag  string `json:"old_tag"`
+	NewTag  string `json:"new_tag"`
 }
 
 type RuntimeEvent struct {
@@ -182,10 +189,15 @@ func (s *RuntimeStore) consumeLocked(line string) {
 		project.Status = defaultString(stringValue(event["status"]), "unknown")
 		project.Services = stringSlice(event["services"])
 		project.VersionChanges = intValue(event["version_changes"])
+		project.Versions = versionChanges(event["versions"])
 		project.DurationMS = int64Value(event["duration_ms"])
 		project.Error = stringValue(event["error"])
 		for index := len(run.Events) - 1; index >= 0; index-- {
 			if run.Events[index].ComposeFile == composeFile && run.Events[index].Status == "running" {
+				if project.Status == "skipped" {
+					run.Events = append(run.Events[:index], run.Events[index+1:]...)
+					break
+				}
 				run.Events[index].Time = now
 				run.Events[index].Status = project.Status
 				run.Events[index].Title = project.Project
@@ -270,8 +282,9 @@ func projectName(composeFile string) string {
 func projectDetail(project RuntimeProject) string {
 	switch project.Status {
 	case "updated", "config_updated":
-		if len(project.Services) > 0 {
-			return "已更新服务：" + strings.Join(project.Services, "、")
+		services := updatedServiceDetails(project)
+		if len(services) > 0 {
+			return "已更新服务：" + strings.Join(services, "、")
 		}
 		return "Compose 配置已更新"
 	case "unchanged":
@@ -285,6 +298,37 @@ func projectDetail(project RuntimeProject) string {
 	default:
 		return "项目检查完成"
 	}
+}
+
+func updatedServiceDetails(project RuntimeProject) []string {
+	versionsByService := make(map[string]RuntimeVersionChange, len(project.Versions))
+	for _, change := range project.Versions {
+		versionsByService[change.Service] = change
+	}
+	names := append([]string(nil), project.Services...)
+	for _, change := range project.Versions {
+		found := false
+		for _, name := range names {
+			if name == change.Service {
+				found = true
+				break
+			}
+		}
+		if !found {
+			names = append(names, change.Service)
+		}
+	}
+	sort.Strings(names)
+	details := make([]string, 0, len(names))
+	for _, name := range names {
+		change, ok := versionsByService[name]
+		if ok && change.OldTag != "" && change.NewTag != "" {
+			details = append(details, fmt.Sprintf("%s %s → %s", name, change.OldTag, change.NewTag))
+			continue
+		}
+		details = append(details, name)
+	}
+	return details
 }
 
 func cycleFinishedTitle(run RuntimeRun) string {
@@ -343,6 +387,30 @@ func stringSlice(value any) []string {
 		}
 	}
 	sort.Strings(result)
+	return result
+}
+
+func versionChanges(value any) []RuntimeVersionChange {
+	values, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]RuntimeVersionChange, 0, len(values))
+	for _, item := range values {
+		fields, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		change := RuntimeVersionChange{
+			Service: stringValue(fields["service"]),
+			OldTag:  stringValue(fields["old_tag"]),
+			NewTag:  stringValue(fields["new_tag"]),
+		}
+		if change.Service != "" {
+			result = append(result, change)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Service < result[j].Service })
 	return result
 }
 

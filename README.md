@@ -306,6 +306,8 @@ BARK_DEVICE_KEY=your-device-key
 - `run` 成功修改标签或重建服务。
 - Registry 查询、Compose 校验、镜像拉取、服务重建、健康检查、Docker 前置检查或调度发生错误。
 
+运行中心的 Bark 配置页可以直接发送测试通知；页面中新输入的配置会用于本次测试，Device Key 留空时会安全复用已保存的密钥。
+
 没有更新时不会发送成功通知。
 
 ## Registry、凭据与代理
@@ -378,7 +380,7 @@ COMPOSE_UPDATER_INSECURE_REGISTRIES=registry.local:5000,192.168.1.10:5000
 从 [Releases](https://github.com/guchengod/compose-updater/releases/latest) 下载对应平台。Linux amd64 示例：
 
 ```bash
-VERSION=v0.6.1
+VERSION=v0.6.5
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/compose-updater-${VERSION}-linux-amd64.tar.gz"
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS

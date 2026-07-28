@@ -88,6 +88,7 @@ Registry 代理测试可能收到 Docker Hub 的 `401 Unauthorized`。这是 Reg
 - 固定版本和 SHA 标签会查询目标版本；发生变化时先备份并改写 Compose，再拉取并重建。
 - `latest` 不改写 Compose，但每次会拉取并比较本地运行镜像 ID；摘要变化才重建。
 - 更新成功、发现可用更新以及中间错误都会按 Bark 配置通知。
+- Bark 配置页支持发送测试通知；未填写新 Device Key 时会复用已保存的密钥。
 - 拉取、重建或健康检查失败时，程序恢复 Compose 文件并尝试恢复旧服务。
 
 ## 6. 日志与故障排查
@@ -125,14 +126,14 @@ tail -n 200 /var/apps/ComposeUpdater/var/fnos-manager.log
 安装飞牛官方 `fnpack` 1.2.3 和 Go 1.26，然后执行：
 
 ```bash
-FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.6.4
+FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.6.5
 ```
 
 产物：
 
 ```text
-build/fnos/ComposeUpdater-v0.6.4-x86.fpk
-build/fnos/ComposeUpdater-v0.6.4-arm.fpk
+build/fnos/ComposeUpdater-v0.6.5-x86.fpk
+build/fnos/ComposeUpdater-v0.6.5-arm.fpk
 ```
 
 构建脚本分别交叉编译 Linux amd64/arm64 的 `compose-updater` 和 `fnos-manager`，再调用官方 `fnpack` 打包。FPK 构建目录位于 `fnos/`，不会改变现有 `make build`、`make build-all` 或 `docker build` 行为。

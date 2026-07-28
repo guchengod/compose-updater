@@ -96,6 +96,8 @@
             <div class="field-row"><div><label for="barkEndpoint">Endpoint</label><input id="barkEndpoint" placeholder="https://api.day.app"></div><div><label for="barkGroup">分组</label><input id="barkGroup" placeholder="compose-updater"></div></div>
             <div class="field-row"><div><label for="deviceKey">Device Key</label><input id="deviceKey" type="password" autocomplete="new-password" placeholder="留空则保留现有密钥"><p id="keyState" class="hint">尚未配置密钥</p></div><div><label for="deviceKeyEnv">环境变量名</label><input id="deviceKeyEnv" placeholder="BARK_DEVICE_KEY"><p class="hint">环境变量存在时优先使用环境变量。</p></div></div>
             <label class="check-row"><input id="clearDeviceKey" type="checkbox">清除已保存的 Device Key</label>
+            <div class="notification-test"><button id="testBark" class="secondary" type="button">发送测试通知</button><span class="hint">测试当前页面中的配置；Device Key 留空时使用已保存的密钥。</span></div>
+            <div id="barkTestResult" class="inline-result" hidden></div>
           </div>
         </section>
       </form>

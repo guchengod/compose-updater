@@ -138,6 +138,7 @@ func (u *Updater) Run(ctx context.Context, apply bool) RunSummary {
 			"status", result.Status,
 			"services", changedServiceNames(result.ServiceChanges),
 			"version_changes", len(result.VersionChanges),
+			"versions", result.VersionChanges,
 			"duration_ms", result.DurationMS,
 			"error", result.Error,
 		)

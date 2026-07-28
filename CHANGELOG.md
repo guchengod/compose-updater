@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [v0.6.5] - 2026-07-28
+
+- 执行时间线展示服务的具体标签变更，例如 `server 1.0 → 1.1`。
+- 没有符合自动更新条件的运行服务不再占用执行时间线，项目诊断信息仍保留在项目状态中。
+- Bark 配置页新增测试通知，可测试页面中尚未保存的配置，并安全复用已保存的 Device Key。
+
 ## [v0.6.4] - 2026-07-22
 
 - 补齐飞牛应用中心审核所需的最低 fnOS 版本、目录授权开关和面向用户的更新说明。
@@ -72,3 +78,4 @@
 [v0.6.2]: https://github.com/guchengod/compose-updater/compare/v0.6.1...v0.6.2
 [v0.6.3]: https://github.com/guchengod/compose-updater/compare/v0.6.2...v0.6.3
 [v0.6.4]: https://github.com/guchengod/compose-updater/compare/v0.6.3...v0.6.4
+[v0.6.5]: https://github.com/guchengod/compose-updater/compare/v0.6.4...v0.6.5

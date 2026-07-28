@@ -856,6 +856,15 @@ input[type="number"] {
   background: var(--danger-soft);
   color: var(--danger);
 }
+.notification-test {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.notification-test .hint {
+  margin: 0;
+}
 .check-row {
   font-weight: 500;
   font-size: 10px;

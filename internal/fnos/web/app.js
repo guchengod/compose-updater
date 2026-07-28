@@ -237,9 +237,10 @@ function renderRunDetail() {
   if (run.status !== 'running') { const retry = element('button', 'secondary', '重新运行本次'); retry.type = 'button'; retry.addEventListener('click', triggerRun); detailActions.append(retry); }
   header.append(title, detailActions);
   const metrics = element('div', 'metrics'); metrics.append(metric('检查项目', run.projects_checked, '', 'list-check'), metric('更新项目', run.projects_updated, '', 'refresh'), metric('失败项目', run.projects_failed, '', 'alert-triangle'), metric('总耗时', run.duration_ms ? (run.duration_ms / 1000).toFixed(1) : '—', run.duration_ms ? '秒' : '', 'clock'));
-  const timelineHeading = element('div', 'timeline-heading'); timelineHeading.append(element('h3', '', '执行时间线'), element('span', '', `${(run.events || []).length} 个事件`));
+  const visibleEvents = (run.events || []).filter((event) => event.detail !== '没有符合自动更新条件的运行服务');
+  const timelineHeading = element('div', 'timeline-heading'); timelineHeading.append(element('h3', '', '执行时间线'), element('span', '', `${visibleEvents.length} 个事件`));
   const timeline = element('div', 'timeline');
-  (run.events || []).forEach((event) => {
+  visibleEvents.forEach((event) => {
     const row = element('div', `timeline-event ${event.status}`);
     const statusIcon = element('span', 'timeline-icon'); statusIcon.append(icon(eventIcon(event.status)));
     const copy = element('div', 'timeline-copy'); copy.append(element('strong', '', event.title), element('p', '', event.detail || ''));
@@ -362,6 +363,28 @@ $('testProxy').addEventListener('click', async () => {
   const result = $('proxyResult'); result.hidden = false; result.className = 'inline-result'; result.textContent = '正在通过代理连接 Docker Registry…';
   try { const payload = await api('proxy-test', { method: 'POST', headers: { 'X-Compose-Updater': 'web' }, body: JSON.stringify({ proxy: $('registryProxy').value.trim() }) }); result.textContent = payload.message; }
   catch (error) { result.className = 'inline-result error'; result.textContent = error.message; }
+});
+$('testBark').addEventListener('click', async () => {
+  const button = $('testBark'); const result = $('barkTestResult');
+  button.disabled = true; result.hidden = false; result.className = 'inline-result'; result.textContent = '正在发送 Bark 测试通知…';
+  try {
+    const payload = await api('bark-test', {
+      method: 'POST',
+      headers: { 'X-Compose-Updater': 'web' },
+      body: JSON.stringify({
+        endpoint: $('barkEndpoint').value.trim(),
+        device_key: $('deviceKey').value.trim(),
+        device_key_env: $('deviceKeyEnv').value.trim(),
+        group: $('barkGroup').value.trim(),
+        clear_device_key: $('clearDeviceKey').checked
+      })
+    });
+    result.textContent = payload.message;
+  } catch (error) {
+    result.className = 'inline-result error'; result.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
 
