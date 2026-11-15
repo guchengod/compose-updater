@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaultsAndNormalize(t *testing.T) {
@@ -95,6 +96,76 @@ func TestLoadRejectsInvalidRegistryProxy(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("expected registry proxy validation error")
+	}
+}
+
+func TestLoadRetryDefaults(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := cfg.RetryPolicy()
+	if policy.MaxAttempts != 4 {
+		t.Fatalf("expected default MaxAttempts=4, got %d", policy.MaxAttempts)
+	}
+	if policy.InitialInterval != 2*time.Second {
+		t.Fatalf("expected default InitialInterval=2s, got %v", policy.InitialInterval)
+	}
+	if policy.MaxInterval != 30*time.Second {
+		t.Fatalf("expected default MaxInterval=30s, got %v", policy.MaxInterval)
+	}
+}
+
+func TestLoadCustomRetry(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"retry":{"max_attempts":5,"initial_interval":"3s","max_interval":"45s"},"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := cfg.RetryPolicy()
+	if policy.MaxAttempts != 5 {
+		t.Fatalf("expected MaxAttempts=5, got %d", policy.MaxAttempts)
+	}
+	if policy.InitialInterval != 3*time.Second {
+		t.Fatalf("expected InitialInterval=3s, got %v", policy.InitialInterval)
+	}
+	if policy.MaxInterval != 45*time.Second {
+		t.Fatalf("expected MaxInterval=45s, got %v", policy.MaxInterval)
+	}
+}
+
+func TestLoadRejectsInvalidRetryAttempts(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"retry":{"max_attempts":15},"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected max_attempts validation error for 15")
+	}
+}
+
+func TestLoadRejectsInvalidRetryInterval(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"version":1,"paths":[` + quote(root) + `],"retry":{"initial_interval":"10s","max_interval":"2s"},"bark":{"enabled":false}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected initial_interval > max_interval validation error")
 	}
 }
 

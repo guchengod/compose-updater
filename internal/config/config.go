@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/guchengod/compose-updater/internal/cronexpr"
+	"github.com/guchengod/compose-updater/internal/retry"
 )
 
 const (
@@ -32,22 +33,24 @@ var (
 )
 
 type Config struct {
-	Version       int        `json:"version"`
-	Paths         []string   `json:"paths"`
-	SkipDirs      []string   `json:"skip_dirs"`
-	Depth         int        `json:"depth"`
-	Schedule      string     `json:"schedule"`
-	Timezone      string     `json:"timezone"`
-	RunOnStart    bool       `json:"run_on_start"`
-	StableOnly    bool       `json:"stable_only"`
-	RegistryProxy string     `json:"registry_proxy"`
-	Bark          BarkConfig `json:"bark"`
+	Version       int         `json:"version"`
+	Paths         []string    `json:"paths"`
+	SkipDirs      []string    `json:"skip_dirs"`
+	Depth         int         `json:"depth"`
+	Schedule      string      `json:"schedule"`
+	Timezone      string      `json:"timezone"`
+	RunOnStart    bool        `json:"run_on_start"`
+	StableOnly    bool        `json:"stable_only"`
+	RegistryProxy string      `json:"registry_proxy"`
+	Retry         RetryConfig `json:"retry"`
+	Bark          BarkConfig  `json:"bark"`
 
 	NodeName           string       `json:"-"`
 	LockFile           string       `json:"-"`
 	LogLevel           string       `json:"-"`
 	Docker             DockerConfig `json:"-"`
 	location           *time.Location
+	retryPolicy        retry.Policy
 	configTimeout      time.Duration
 	registryTimeout    time.Duration
 	pullTimeout        time.Duration
@@ -59,16 +62,23 @@ type Config struct {
 }
 
 type fileConfig struct {
-	Version       int        `json:"version"`
-	Paths         []string   `json:"paths"`
-	SkipDirs      []string   `json:"skip_dirs"`
-	Depth         *int       `json:"depth"`
-	Schedule      string     `json:"schedule"`
-	Timezone      string     `json:"timezone"`
-	RunOnStart    *bool      `json:"run_on_start"`
-	StableOnly    *bool      `json:"stable_only"`
-	RegistryProxy string     `json:"registry_proxy"`
-	Bark          BarkConfig `json:"bark"`
+	Version       int         `json:"version"`
+	Paths         []string    `json:"paths"`
+	SkipDirs      []string    `json:"skip_dirs"`
+	Depth         *int        `json:"depth"`
+	Schedule      string      `json:"schedule"`
+	Timezone      string      `json:"timezone"`
+	RunOnStart    *bool       `json:"run_on_start"`
+	StableOnly    *bool       `json:"stable_only"`
+	RegistryProxy string      `json:"registry_proxy"`
+	Retry         RetryConfig `json:"retry"`
+	Bark          BarkConfig  `json:"bark"`
+}
+
+type RetryConfig struct {
+	MaxAttempts     int    `json:"max_attempts"`
+	InitialInterval string `json:"initial_interval"`
+	MaxInterval     string `json:"max_interval"`
 }
 
 type BarkConfig struct {
@@ -116,6 +126,7 @@ func Load(path string) (*Config, error) {
 		RunOnStart:    true,
 		StableOnly:    true,
 		RegistryProxy: strings.TrimSpace(raw.RegistryProxy),
+		Retry:         raw.Retry,
 		Bark:          raw.Bark,
 	}
 	if raw.Depth != nil {
@@ -162,6 +173,43 @@ func (c *Config) normalize(configPath string) error {
 		default:
 			return fmt.Errorf("registry_proxy 仅支持 http/https/socks5/socks5h，当前为 %q", proxyURL.Scheme)
 		}
+	}
+
+	maxAttempts := c.Retry.MaxAttempts
+	if maxAttempts == 0 {
+		maxAttempts = 4
+	} else if maxAttempts < 1 || maxAttempts > 10 {
+		return fmt.Errorf("retry.max_attempts 必须在 1 到 10 之间，当前为 %d", c.Retry.MaxAttempts)
+	}
+
+	initialInterval := 2 * time.Second
+	if trimmed := strings.TrimSpace(c.Retry.InitialInterval); trimmed != "" {
+		parsed, err := time.ParseDuration(trimmed)
+		if err != nil || parsed <= 0 {
+			return fmt.Errorf("retry.initial_interval 必须是正数 Go 时长，当前为 %q", c.Retry.InitialInterval)
+		}
+		initialInterval = parsed
+	}
+
+	maxInterval := 30 * time.Second
+	if trimmed := strings.TrimSpace(c.Retry.MaxInterval); trimmed != "" {
+		parsed, err := time.ParseDuration(trimmed)
+		if err != nil || parsed <= 0 {
+			return fmt.Errorf("retry.max_interval 必须是正数 Go 时长，当前为 %q", c.Retry.MaxInterval)
+		}
+		maxInterval = parsed
+	}
+
+	if initialInterval > maxInterval {
+		return fmt.Errorf("retry.initial_interval (%v) 不能大于 retry.max_interval (%v)", initialInterval, maxInterval)
+	}
+
+	c.retryPolicy = retry.Policy{
+		MaxAttempts:     maxAttempts,
+		InitialInterval: initialInterval,
+		MaxInterval:     maxInterval,
+		Multiplier:      2.0,
+		JitterRatio:     0.1,
 	}
 
 	location, err := time.LoadLocation(c.Timezone)
@@ -336,6 +384,12 @@ func (c *Config) UpdateTimeout() time.Duration      { return c.updateTimeout }
 func (c *Config) HealthTimeout() time.Duration      { return c.healthTimeout }
 func (c *Config) HealthPollInterval() time.Duration { return c.healthPollInterval }
 func (c *Config) StableDuration() time.Duration     { return c.stableDuration }
+func (c *Config) RetryPolicy() retry.Policy {
+	if c.retryPolicy.MaxAttempts == 0 {
+		return retry.DefaultPolicy()
+	}
+	return c.retryPolicy
+}
 func (b BarkConfig) RequestTimeout() time.Duration {
 	if b.requestTimeout > 0 {
 		return b.requestTimeout
