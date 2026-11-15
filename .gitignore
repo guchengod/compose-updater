@@ -14,3 +14,14 @@ config.json
 *.bak
 *.compose-updater.bak
 *.log
+
+# AI agent harnesses & design skills
+.agents/
+.claude/
+.cursor/
+.gemini/
+.github/agents/
+.github/hooks/
+.github/skills/
+.impeccable/
+PRODUCT.md
