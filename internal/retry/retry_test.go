@@ -222,3 +222,94 @@ func TestCalculateDelayBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestIsRetryableHTTPStatus(t *testing.T) {
+	retryable := []int{429, 500, 502, 503, 504}
+	for _, status := range retryable {
+		if !retry.IsRetryableHTTPStatus(status) {
+			t.Errorf("expected HTTP %d to be retryable", status)
+		}
+	}
+
+	nonRetryable := []int{200, 201, 204, 400, 401, 403, 404, 405, 409, 422}
+	for _, status := range nonRetryable {
+		if retry.IsRetryableHTTPStatus(status) {
+			t.Errorf("expected HTTP %d to NOT be retryable", status)
+		}
+	}
+}
+
+func TestIsRetryableNetworkError(t *testing.T) {
+	if retry.IsRetryableNetworkError(nil) {
+		t.Error("expected nil error to NOT be retryable")
+	}
+	if retry.IsRetryableNetworkError(context.Canceled) {
+		t.Error("expected context.Canceled to NOT be retryable")
+	}
+	if retry.IsRetryableNetworkError(context.DeadlineExceeded) {
+		t.Error("expected context.DeadlineExceeded to NOT be retryable")
+	}
+
+	retryableCases := []error{
+		errors.New("read tcp 127.0.0.1:54321->127.0.0.1:7890: read: connection reset by peer"),
+		errors.New("dial tcp 192.168.1.10:7890: connect: connection refused"),
+		errors.New("socks connect tcp 127.0.0.1:1080->registry-1.docker.io:443: unknown error general SOCKS server failure"),
+		errors.New("net/http: TLS handshake timeout"),
+		errors.New("i/o timeout"),
+		errors.New("unexpected EOF"),
+		errors.New("lookup registry-1.docker.io on 127.0.0.53:53: server misbehaving"),
+	}
+
+	for _, err := range retryableCases {
+		if !retry.IsRetryableNetworkError(err) {
+			t.Errorf("expected %q to be retryable", err.Error())
+		}
+	}
+
+	nonRetryableCases := []error{
+		errors.New("invalid image reference"),
+		errors.New("HTTP 404: not found"),
+		errors.New("authentication required"),
+	}
+
+	for _, err := range nonRetryableCases {
+		if retry.IsRetryableNetworkError(err) {
+			t.Errorf("expected %q to NOT be retryable", err.Error())
+		}
+	}
+}
+
+func TestIsRetryablePullError(t *testing.T) {
+	if retry.IsRetryablePullError(nil) {
+		t.Error("expected nil error to NOT be retryable")
+	}
+	if retry.IsRetryablePullError(context.Canceled) {
+		t.Error("expected context.Canceled to NOT be retryable")
+	}
+
+	retryablePullCases := []error{
+		errors.New("Get \"https://registry-1.docker.io/v2/\": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)"),
+		errors.New("error pulling image configuration: download failed after 6 attempts: EOF"),
+		errors.New("failed to fetch oauth token: Post \"https://auth.docker.io/token\": dial tcp: lookup auth.docker.io on 1.1.1.1:53: read: connection reset by peer"),
+		errors.New("received unexpected HTTP status: 502 Bad Gateway"),
+		errors.New("proxyconnect tcp: dial tcp 127.0.0.1:7890: connect: connection refused"),
+	}
+
+	for _, err := range retryablePullCases {
+		if !retry.IsRetryablePullError(err) {
+			t.Errorf("expected pull error %q to be retryable", err.Error())
+		}
+	}
+
+	nonRetryablePullCases := []error{
+		errors.New("manifest for myrepo/myimage:notfound not found: manifest unknown: manifest unknown"),
+		errors.New("repository does not exist or may require 'docker login': denied: requested access to the resource is denied"),
+		errors.New("unknown flag: --invalid-flag"),
+	}
+
+	for _, err := range nonRetryablePullCases {
+		if retry.IsRetryablePullError(err) {
+			t.Errorf("expected pull error %q to NOT be retryable", err.Error())
+		}
+	}
+}
