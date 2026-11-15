@@ -12,7 +12,7 @@ func TestAcquireExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("首次获取锁失败: %v", err)
 	}
-	defer first.Close()
+	defer func() { _ = first.Close() }()
 
 	second, err := Acquire(path)
 	if second != nil {

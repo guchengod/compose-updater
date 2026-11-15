@@ -134,7 +134,7 @@ func validateStandaloneAddress(address, password string) error {
 	ip := net.ParseIP(host)
 	loopback := strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
 	if !loopback && strings.TrimSpace(password) == "" {
-		return errors.New("Web 界面监听非本机地址时必须设置 COMPOSE_UPDATER_WEB_PASSWORD 或 -web-password")
+		return errors.New("web 界面监听非本机地址时必须设置 COMPOSE_UPDATER_WEB_PASSWORD 或 -web-password")
 	}
 	return nil
 }

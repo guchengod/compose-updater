@@ -107,7 +107,7 @@ func SaveSettings(path string, incoming Settings) error {
 	if err := atomicfile.Write(testPath, data, 0o600); err != nil {
 		return fmt.Errorf("创建待验证配置: %w", err)
 	}
-	defer os.Remove(testPath)
+	defer func() { _ = os.Remove(testPath) }()
 	if _, err := config.Load(testPath); err != nil {
 		return err
 	}

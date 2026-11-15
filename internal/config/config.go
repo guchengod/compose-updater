@@ -100,7 +100,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("打开配置文件 %q: %w", path, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var raw fileConfig
 	decoder := json.NewDecoder(file)
@@ -347,7 +347,7 @@ func (c *Config) normalize(configPath string) error {
 			c.Bark.DeviceKey = strings.TrimSpace(os.Getenv(c.Bark.DeviceKeyEnv))
 		}
 		if c.Bark.DeviceKey == "" {
-			return fmt.Errorf("Bark 已启用，但 device_key 和环境变量 %s 均为空", c.Bark.DeviceKeyEnv)
+			return fmt.Errorf("bark 已启用，但 device_key 和环境变量 %s 均为空", c.Bark.DeviceKeyEnv)
 		}
 		if strings.TrimSpace(c.Bark.Group) == "" {
 			c.Bark.Group = "Docker更新"

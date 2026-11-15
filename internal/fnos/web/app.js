@@ -76,7 +76,7 @@ function pathRow(value = '', group = '') {
   choose.type = 'button';
   choose.setAttribute('aria-label', '选择目录');
   choose.append(icon('folder-open'));
-  choose.addEventListener('click', () => openDirectoryPicker(input));
+  choose.addEventListener('click', () => openDirectoryPicker(input, choose));
 
   const remove = element('button', 'remove-path');
   remove.type = 'button';
@@ -311,25 +311,52 @@ async function loadDirectory(directory) {
     state.pickerPath = payload.path; state.locations = payload.locations || state.locations; $('directoryCurrent').textContent = payload.path; $('directoryUp').disabled = !payload.parent; $('directoryUp').dataset.parent = payload.parent || ''; renderLocations(); list.replaceChildren();
     if (!payload.directories.length) list.append(element('div', 'directory-empty', '此目录中没有子目录'));
     payload.directories.forEach((item) => {
-      const row = element('div', 'directory-entry'); row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-label', item.name); row.append(icon('folder'), element('span', '', item.name));
-      const open = element('button', 'open-folder'); open.type = 'button'; open.setAttribute('aria-label', `打开 ${item.name}`); open.append(icon('chevron-right'));
-      open.addEventListener('click', (event) => { event.stopPropagation(); loadDirectory(item.path); }); row.append(open);
-      row.addEventListener('click', () => { document.querySelectorAll('.directory-entry').forEach((entry) => entry.classList.remove('selected')); row.classList.add('selected'); state.pickerSelected = item.path; $('directorySelect').disabled = false; });
-      row.addEventListener('dblclick', () => loadDirectory(item.path));
-      row.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadDirectory(item.path); if (event.key === ' ') { event.preventDefault(); row.click(); } });
+      const row = element('div', 'directory-entry');
+      row.setAttribute('role', 'listitem');
+      const nameButton = element('button', 'directory-name-button');
+      nameButton.type = 'button';
+      nameButton.setAttribute('aria-label', `选择文件夹 ${item.name}`);
+      nameButton.append(icon('folder'), element('span', '', item.name));
+      nameButton.addEventListener('click', () => {
+        document.querySelectorAll('.directory-entry').forEach((entry) => entry.classList.remove('selected'));
+        row.classList.add('selected');
+        state.pickerSelected = item.path;
+        $('directorySelect').disabled = false;
+      });
+      nameButton.addEventListener('dblclick', () => loadDirectory(item.path));
+
+      const open = element('button', 'open-folder');
+      open.type = 'button';
+      open.setAttribute('aria-label', `打开文件夹 ${item.name}`);
+      open.append(icon('chevron-right'));
+      open.addEventListener('click', (event) => { event.stopPropagation(); loadDirectory(item.path); });
+
+      row.append(nameButton, open);
       list.append(row);
     });
   } catch (requestError) { list.replaceChildren(); error.textContent = requestError.message; error.hidden = false; }
 }
 
-function openDirectoryPicker(input) {
+function openDirectoryPicker(input, trigger) {
   state.pickerInput = input;
+  state.pickerTrigger = trigger || document.activeElement;
   const initial = input.value.trim() || state.authorizedPaths[0] || '/';
-  $('directoryPicker').hidden = false; document.body.classList.add('modal-open'); loadDirectory(initial);
+  $('directoryPicker').hidden = false;
+  document.body.classList.add('modal-open');
+  loadDirectory(initial);
+  window.requestAnimationFrame(() => {
+    $('directoryPickerClose').focus();
+  });
 }
 
 function closeDirectoryPicker() {
-  $('directoryPicker').hidden = true; document.body.classList.remove('modal-open'); state.pickerInput = null;
+  $('directoryPicker').hidden = true;
+  document.body.classList.remove('modal-open');
+  state.pickerInput = null;
+  if (state.pickerTrigger && typeof state.pickerTrigger.focus === 'function') {
+    state.pickerTrigger.focus();
+  }
+  state.pickerTrigger = null;
 }
 
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
@@ -358,7 +385,32 @@ $('directorySelect').addEventListener('click', () => { if (state.pickerInput && 
 $('directoryPickerClose').addEventListener('click', closeDirectoryPicker);
 $('directoryPickerCancel').addEventListener('click', closeDirectoryPicker);
 $('directoryPicker').addEventListener('click', (event) => { if (event.target === $('directoryPicker')) closeDirectoryPicker(); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('directoryPicker').hidden) closeDirectoryPicker(); });
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('directoryPicker').hidden) {
+    closeDirectoryPicker();
+  }
+});
+
+$('directoryPicker').addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') {
+    const focusable = Array.from(
+      $('directoryPicker').querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => el.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+});
+
 $('testProxy').addEventListener('click', async () => {
   const result = $('proxyResult'); result.hidden = false; result.className = 'inline-result'; result.textContent = '正在通过代理连接 Docker Registry…';
   try { const payload = await api('proxy-test', { method: 'POST', headers: { 'X-Compose-Updater': 'web' }, body: JSON.stringify({ proxy: $('registryProxy').value.trim() }) }); result.textContent = payload.message; }
@@ -388,4 +440,25 @@ $('testBark').addEventListener('click', async () => {
 });
 window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
 
-setView('runs'); loadConfig(); loadStatus(); window.setInterval(loadStatus, 15000);
+let statusTimer = null;
+function startStatusPolling() {
+  if (!statusTimer) {
+    statusTimer = window.setInterval(loadStatus, 15000);
+  }
+}
+function stopStatusPolling() {
+  if (statusTimer) {
+    window.clearInterval(statusTimer);
+    statusTimer = null;
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopStatusPolling();
+  } else {
+    loadStatus();
+    startStatusPolling();
+  }
+});
+
+setView('runs'); loadConfig(); loadStatus(); startStatusPolling();

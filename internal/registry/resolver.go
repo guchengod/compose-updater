@@ -427,7 +427,7 @@ func (l *RemoteLister) listDockerHubTags(ctx context.Context, reference ImageRef
 			return nil, fmt.Errorf("读取 Docker Hub 标签响应: %w", readErr)
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			return nil, fmt.Errorf("Docker Hub HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+			return nil, fmt.Errorf("docker hub HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 		}
 		var page dockerHubTagResponse
 		if err := json.Unmarshal(body, &page); err != nil {
@@ -473,7 +473,7 @@ func (l *RemoteLister) listRegistryTags(ctx context.Context, reference ImageRefe
 			return nil, fmt.Errorf("读取 Registry 响应: %w", readErr)
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			return nil, fmt.Errorf("Registry HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+			return nil, fmt.Errorf("registry HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 		}
 		var page tagResponse
 		if err := json.Unmarshal(body, &page); err != nil {
@@ -523,7 +523,7 @@ func (l *RemoteLister) authorizedGet(ctx context.Context, target *url.URL, refer
 		return l.executeRequest(ctx, retryReq)
 	case "basic":
 		if creds.Username == "" {
-			return nil, fmt.Errorf("Registry 要求 Basic 认证，但未找到 %s 凭据", reference.Registry)
+			return nil, fmt.Errorf("registry 要求 Basic 认证，但未找到 %s 凭据", reference.Registry)
 		}
 		retryReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 		if err != nil {
@@ -532,14 +532,14 @@ func (l *RemoteLister) authorizedGet(ctx context.Context, target *url.URL, refer
 		retryReq.SetBasicAuth(creds.Username, creds.Password)
 		return l.executeRequest(ctx, retryReq)
 	default:
-		return nil, fmt.Errorf("Registry 返回 401，但认证挑战无效: %q", challenge)
+		return nil, fmt.Errorf("registry 返回 401，但认证挑战无效: %q", challenge)
 	}
 }
 
 func (l *RemoteLister) fetchBearerToken(ctx context.Context, parameters map[string]string, reference ImageReference, creds credentials) (string, error) {
 	realm := parameters["realm"]
 	if realm == "" {
-		return "", errors.New("Bearer 认证挑战缺少 realm")
+		return "", errors.New("bearer 认证挑战缺少 realm")
 	}
 	tokenURL, err := url.Parse(realm)
 	if err != nil {
@@ -566,13 +566,13 @@ func (l *RemoteLister) fetchBearerToken(ctx context.Context, parameters map[stri
 	if err != nil {
 		return "", fmt.Errorf("请求 Registry token: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	if err != nil {
 		return "", err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("Registry token HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("registry token HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var parsed tokenResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -584,7 +584,7 @@ func (l *RemoteLister) fetchBearerToken(ctx context.Context, parameters map[stri
 	if parsed.AccessToken != "" {
 		return parsed.AccessToken, nil
 	}
-	return "", errors.New("Registry token 响应未包含 token")
+	return "", errors.New("registry token 响应未包含 token")
 }
 
 func parseAuthChallenge(value string) (string, map[string]string) {

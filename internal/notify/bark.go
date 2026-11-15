@@ -76,7 +76,7 @@ func (b *Bark) Send(ctx context.Context, title, body, level string) error {
 	if err != nil {
 		return fmt.Errorf("发送 Bark 请求: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		return fmt.Errorf("读取 Bark 响应: %w", err)

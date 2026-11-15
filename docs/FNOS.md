@@ -126,14 +126,14 @@ tail -n 200 /var/apps/ComposeUpdater/var/fnos-manager.log
 安装飞牛官方 `fnpack` 1.2.3 和 Go 1.26，然后执行：
 
 ```bash
-FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.6.5
+FNPACK=/usr/local/bin/fnpack make fnos-build VERSION=v0.6.6
 ```
 
 产物：
 
 ```text
-build/fnos/ComposeUpdater-v0.6.5-x86.fpk
-build/fnos/ComposeUpdater-v0.6.5-arm.fpk
+build/fnos/ComposeUpdater-v0.6.6-x86.fpk
+build/fnos/ComposeUpdater-v0.6.6-arm.fpk
 ```
 
 构建脚本分别交叉编译 Linux amd64/arm64 的 `compose-updater` 和 `fnos-manager`，再调用官方 `fnpack` 打包。FPK 构建目录位于 `fnos/`，不会改变现有 `make build`、`make build-all` 或 `docker build` 行为。

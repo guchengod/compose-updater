@@ -65,7 +65,7 @@ func (c *Client) ResolveProjectName(ctx context.Context) (string, execx.Result, 
 		return "", result, nil
 	}
 	if len(matches) > 1 {
-		return "", result, fmt.Errorf("Compose 文件 %q 同时匹配多个项目: %s", c.composeFile, strings.Join(matches, ", "))
+		return "", result, fmt.Errorf("compose 文件 %q 同时匹配多个项目: %s", c.composeFile, strings.Join(matches, ", "))
 	}
 	c.projectName = matches[0]
 	return c.projectName, result, nil

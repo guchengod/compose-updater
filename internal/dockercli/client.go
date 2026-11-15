@@ -36,10 +36,10 @@ func NewClient(docker config.DockerConfig, runner execx.Runner) *Client {
 
 func (c *Client) Check(ctx context.Context) error {
 	if _, err := c.runner.Run(ctx, "", c.env, c.command, "version", "--format", "{{.Server.Version}}"); err != nil {
-		return fmt.Errorf("Docker Engine 不可用: %w", err)
+		return fmt.Errorf("docker engine 不可用: %w", err)
 	}
 	if _, err := c.runner.Run(ctx, "", c.env, c.command, "compose", "version"); err != nil {
-		return fmt.Errorf("Docker Compose v2 不可用: %w", err)
+		return fmt.Errorf("docker compose v2 不可用: %w", err)
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/guchengod/compose-updater/internal/composefile"
 	"github.com/guchengod/compose-updater/internal/config"
@@ -155,7 +156,11 @@ func runOnce(cfg *config.Config, engine *updater.Updater, logger *slog.Logger, a
 		engine.NotifyFailure(runMode(apply), fmt.Errorf("获取运行锁: %w", err))
 		return 1
 	}
-	defer lock.Close()
+	defer func() {
+		if closeErr := lock.Close(); closeErr != nil {
+			logger.Warn("lock_release_failed", "error", closeErr)
+		}
+	}()
 	ctx, stop := platform.NotifyContext(context.Background())
 	defer stop()
 	checkCtx, cancel := context.WithTimeout(ctx, cfg.ConfigTimeout())
@@ -185,7 +190,11 @@ func serve(cfg *config.Config, engine *updater.Updater, logger *slog.Logger, for
 		engine.NotifyFailure("update", fmt.Errorf("获取运行锁: %w", err))
 		return 1
 	}
-	defer lock.Close()
+	defer func() {
+		if closeErr := lock.Close(); closeErr != nil {
+			logger.Warn("lock_release_failed", "error", closeErr)
+		}
+	}()
 	ctx, stop := platform.NotifyContext(context.Background())
 	defer stop()
 	checkCtx, cancel := context.WithTimeout(ctx, cfg.ConfigTimeout())
@@ -276,7 +285,7 @@ func envOr(key, fallback string) string {
 }
 
 func printUsage(out *os.File) {
-	fmt.Fprintln(out, `compose-updater
+	_, _ = fmt.Fprintln(out, `compose-updater
 
 命令：
   compose-updater validate -config config.json

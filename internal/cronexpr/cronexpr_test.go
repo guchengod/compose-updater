@@ -51,3 +51,20 @@ func TestDomDowOrSemantics(t *testing.T) {
 		t.Fatal("day-of-month and day-of-week should use OR semantics when both are restricted")
 	}
 }
+
+func TestWeekdayRangeFullWeek(t *testing.T) {
+	specs := []string{"0 0 * * 0-7", "0 0 * * SUN-SAT", "0 0 * * 1-7"}
+	for _, spec := range specs {
+		s, err := Parse(spec, time.UTC)
+		if err != nil {
+			t.Fatalf("Parse(%q) failed: %v", spec, err)
+		}
+		for day := 0; day <= 6; day++ {
+			// 2026-03-01 is Sunday (weekday 0)
+			dt := time.Date(2026, time.March, 1+day, 0, 0, 0, 0, time.UTC)
+			if !s.Matches(dt) {
+				t.Fatalf("spec %q expected to match weekday %d (%s), but it didn't", spec, dt.Weekday(), dt.Weekday())
+			}
+		}
+	}
+}

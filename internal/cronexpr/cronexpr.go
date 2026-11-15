@@ -46,7 +46,7 @@ func Parse(spec string, location *time.Location) (*Schedule, error) {
 	spec = expandMacro(spec)
 	parts := strings.Fields(spec)
 	if len(parts) != 5 {
-		return nil, fmt.Errorf("Cron 表达式必须包含 5 个字段，当前为 %d: %q", len(parts), spec)
+		return nil, fmt.Errorf("cron 表达式必须包含 5 个字段，当前为 %d: %q", len(parts), spec)
 	}
 
 	defs := []fieldDef{
@@ -106,17 +106,17 @@ func parseField(expr string, def fieldDef) (valueSet, error) {
 	for _, item := range strings.Split(strings.ToUpper(expr), ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
-			return nil, fmt.Errorf("Cron 字段 %s 包含空项", def.name)
+			return nil, fmt.Errorf("cron 字段 %s 包含空项", def.name)
 		}
 		base, stepText, hasStep := strings.Cut(item, "/")
 		step := 1
 		if hasStep {
 			if strings.Contains(stepText, "/") || stepText == "" {
-				return nil, fmt.Errorf("Cron 字段 %s 的步长语法无效: %q", def.name, item)
+				return nil, fmt.Errorf("cron 字段 %s 的步长语法无效: %q", def.name, item)
 			}
 			v, err := strconv.Atoi(stepText)
 			if err != nil || v <= 0 {
-				return nil, fmt.Errorf("Cron 字段 %s 的步长必须是正整数: %q", def.name, item)
+				return nil, fmt.Errorf("cron 字段 %s 的步长必须是正整数: %q", def.name, item)
 			}
 			step = v
 		}
@@ -127,7 +127,7 @@ func parseField(expr string, def fieldDef) (valueSet, error) {
 		case strings.Contains(base, "-"):
 			left, right, ok := strings.Cut(base, "-")
 			if !ok || strings.Contains(right, "-") {
-				return nil, fmt.Errorf("Cron 字段 %s 的范围无效: %q", def.name, item)
+				return nil, fmt.Errorf("cron 字段 %s 的范围无效: %q", def.name, item)
 			}
 			var err error
 			start, err = parseValue(left, def)
@@ -139,7 +139,7 @@ func parseField(expr string, def fieldDef) (valueSet, error) {
 				return nil, err
 			}
 			if start > end {
-				return nil, fmt.Errorf("Cron 字段 %s 暂不支持跨界范围: %q", def.name, item)
+				return nil, fmt.Errorf("cron 字段 %s 暂不支持跨界范围: %q", def.name, item)
 			}
 		default:
 			v, err := parseValue(base, def)
@@ -155,17 +155,15 @@ func parseField(expr string, def fieldDef) (valueSet, error) {
 		}
 
 		for v := start; v <= end; v += step {
+			val := v
 			if def.normal != nil {
-				v = def.normal(v)
+				val = def.normal(val)
 			}
-			result[v] = struct{}{}
-			if def.normal != nil && v == 0 && end == 7 {
-				break
-			}
+			result[val] = struct{}{}
 		}
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("Cron 字段 %s 没有有效值", def.name)
+		return nil, fmt.Errorf("cron 字段 %s 没有有效值", def.name)
 	}
 	return result, nil
 }
@@ -177,7 +175,7 @@ func parseValue(text string, def fieldDef) (int, error) {
 	}
 	v, err := strconv.Atoi(text)
 	if err != nil || v < def.min || v > def.max {
-		return 0, fmt.Errorf("Cron 字段 %s 的值 %q 超出范围 %d-%d", def.name, text, def.min, def.max)
+		return 0, fmt.Errorf("cron 字段 %s 的值 %q 超出范围 %d-%d", def.name, text, def.min, def.max)
 	}
 	return v, nil
 }

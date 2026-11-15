@@ -77,7 +77,9 @@ func (s *Supervisor) Run(ctx context.Context) {
 		case forceRun = <-s.restart:
 			s.logger.Info("updater_restart_requested")
 			stopProcess(cmd.Process)
-			<-wait
+			if stopErr := <-wait; stopErr != nil {
+				s.logger.Debug("updater_stopped_on_restart", "error", stopErr)
+			}
 			s.setRunning(false)
 			if forceRun {
 				select {
@@ -87,7 +89,9 @@ func (s *Supervisor) Run(ctx context.Context) {
 			}
 		case <-ctx.Done():
 			stopProcess(cmd.Process)
-			<-wait
+			if stopErr := <-wait; stopErr != nil {
+				s.logger.Debug("updater_stopped_on_cancel", "error", stopErr)
+			}
 			s.setRunning(false)
 			return
 		}

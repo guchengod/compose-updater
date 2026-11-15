@@ -385,7 +385,7 @@ COMPOSE_UPDATER_INSECURE_REGISTRIES=registry.local:5000,192.168.1.10:5000
 从 [Releases](https://github.com/guchengod/compose-updater/releases/latest) 下载对应平台。Linux amd64 示例：
 
 ```bash
-VERSION=v0.6.5
+VERSION=v0.6.6
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/compose-updater-${VERSION}-linux-amd64.tar.gz"
 curl -fLO "https://github.com/guchengod/compose-updater/releases/download/${VERSION}/SHA256SUMS"
 sha256sum -c --ignore-missing SHA256SUMS

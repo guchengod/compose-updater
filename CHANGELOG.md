@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [v0.6.6] - 2026-11-15
+
+- 新增指数退避与抖动重试机制，自动重试 Registry 镜像标签查询和 Docker 镜像拉取，提升弱网稳定性。
+- 全新现代化 Web 运行中心界面设计，提供原汁原味的纯净明亮质感与精准信息排布。
+- 项目状态重构为响应式卡片网格，支持快速定位 Compose 路径、服务列表与运行状态。
+- 优化 Cron 调度表达式解析器，增强五段式语法校验与跨月份边界处理。
+- 增强 HTTP 客户端超时、代理识别及优雅退出生命周期管理。
+
 ## [v0.6.5] - 2026-07-28
 
 - 执行时间线展示服务的具体标签变更，例如 `server 1.0 → 1.1`。
@@ -79,3 +87,4 @@
 [v0.6.3]: https://github.com/guchengod/compose-updater/compare/v0.6.2...v0.6.3
 [v0.6.4]: https://github.com/guchengod/compose-updater/compare/v0.6.3...v0.6.4
 [v0.6.5]: https://github.com/guchengod/compose-updater/compare/v0.6.4...v0.6.5
+[v0.6.6]: https://github.com/guchengod/compose-updater/compare/v0.6.5...v0.6.6
