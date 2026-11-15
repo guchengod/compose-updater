@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/guchengod/compose-updater/internal/retry"
 )
 
 type fakeLister struct{ tags []TagInfo }
@@ -227,6 +229,53 @@ func TestParseAuthChallenge(t *testing.T) {
 	scheme, params := parseAuthChallenge(`Bearer realm="https://auth.example/token",service="registry",scope="repository:a/b:pull"`)
 	if scheme != "Bearer" || params["realm"] != "https://auth.example/token" || params["scope"] != "repository:a/b:pull" {
 		t.Fatalf("unexpected challenge: %s %#v", scheme, params)
+	}
+}
+
+func TestRemoteListerRetriesOnTransient502(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("502 Bad Gateway from upstream proxy"))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"next": "",
+			"results": []map[string]any{
+				{"name": "v1.2.3", "last_updated": "2026-07-01T00:00:00Z"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	policy := retry.Policy{
+		MaxAttempts:     4,
+		InitialInterval: 5 * time.Millisecond,
+		MaxInterval:     50 * time.Millisecond,
+		Multiplier:      2.0,
+	}
+
+	lister := &RemoteLister{
+		client:           server.Client(),
+		dockerHubBaseURL: server.URL,
+		retryPolicy:      policy,
+	}
+
+	tags, err := lister.List(t.Context(), ImageReference{
+		Registry:   "registry-1.docker.io",
+		Repository: "team/app",
+		Tag:        "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("expected retry to succeed on 3rd attempt, got error: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+	if len(tags) != 1 || tags[0].Name != "v1.2.3" {
+		t.Fatalf("unexpected tags: %#v", tags)
 	}
 }
 

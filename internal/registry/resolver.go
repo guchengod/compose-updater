@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guchengod/compose-updater/internal/retry"
 	"github.com/guchengod/compose-updater/internal/versiontag"
 )
 
@@ -55,6 +56,8 @@ type Resolver struct {
 type RemoteLister struct {
 	client           *http.Client
 	dockerHubBaseURL string
+	logger           *slog.Logger
+	retryPolicy      retry.Policy
 }
 
 type credentials struct {
@@ -91,8 +94,12 @@ type tokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
-func New(timeout time.Duration, logger *slog.Logger, proxyAddress string) *Resolver {
-	return NewWithLister(timeout, logger, &RemoteLister{client: newHTTPClient(timeout, proxyAddress)})
+func New(timeout time.Duration, logger *slog.Logger, proxyAddress string, retryPolicy retry.Policy) *Resolver {
+	return NewWithLister(timeout, logger, &RemoteLister{
+		client:      newHTTPClient(timeout, proxyAddress),
+		logger:      logger,
+		retryPolicy: retryPolicy,
+	})
 }
 
 func NewWithLister(timeout time.Duration, logger *slog.Logger, lister TagLister) *Resolver {
@@ -340,6 +347,56 @@ func (l *RemoteLister) List(ctx context.Context, reference ImageReference) ([]Ta
 	return l.listRegistryTags(ctx, reference)
 }
 
+func (l *RemoteLister) executeRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	if l.client == nil {
+		l.client = &http.Client{Timeout: 2 * time.Minute}
+	}
+
+	policy := l.retryPolicy.Normalize()
+	var response *http.Response
+
+	err := retry.Do(ctx, policy, func(stepCtx context.Context) error {
+		stepReq := req.Clone(stepCtx)
+		resp, err := l.client.Do(stepReq)
+		if err != nil {
+			return err
+		}
+		if retry.IsRetryableHTTPStatus(resp.StatusCode) {
+			snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			_ = resp.Body.Close()
+			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		}
+		response = resp
+		return nil
+	}, func(err error) bool {
+		if retry.IsRetryableNetworkError(err) {
+			return true
+		}
+		msg := err.Error()
+		for _, prefix := range []string{"HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504"} {
+			if strings.HasPrefix(msg, prefix) {
+				return true
+			}
+		}
+		return false
+	}, func(attempt int, delay time.Duration, err error) {
+		if l.logger != nil {
+			l.logger.Warn("registry_http_request_retrying",
+				"url", req.URL.String(),
+				"attempt", attempt,
+				"max_attempts", policy.MaxAttempts,
+				"backoff_duration", delay,
+				"error", err,
+			)
+		}
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (l *RemoteLister) listDockerHubTags(ctx context.Context, reference ImageReference) ([]TagInfo, error) {
 	baseURL := strings.TrimRight(l.dockerHubBaseURL, "/")
 	if baseURL == "" {
@@ -360,7 +417,7 @@ func (l *RemoteLister) listDockerHubTags(ctx context.Context, reference ImageRef
 			return nil, err
 		}
 		request.Header.Set("Accept", "application/json")
-		response, err := l.client.Do(request)
+		response, err := l.executeRequest(ctx, request)
 		if err != nil {
 			return nil, fmt.Errorf("请求 Docker Hub 标签 %s: %w", nextURL, err)
 		}
@@ -441,7 +498,7 @@ func (l *RemoteLister) authorizedGet(ctx context.Context, target *url.URL, refer
 	} else if creds.Username != "" {
 		request.SetBasicAuth(creds.Username, creds.Password)
 	}
-	response, err := l.client.Do(request)
+	response, err := l.executeRequest(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("请求 Registry %s: %w", target, err)
 	}
@@ -457,23 +514,23 @@ func (l *RemoteLister) authorizedGet(ctx context.Context, target *url.URL, refer
 		if err != nil {
 			return nil, err
 		}
-		retry, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+		retryReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 		if err != nil {
 			return nil, err
 		}
-		retry.Header.Set("Accept", "application/json")
-		retry.Header.Set("Authorization", "Bearer "+token)
-		return l.client.Do(retry)
+		retryReq.Header.Set("Accept", "application/json")
+		retryReq.Header.Set("Authorization", "Bearer "+token)
+		return l.executeRequest(ctx, retryReq)
 	case "basic":
 		if creds.Username == "" {
 			return nil, fmt.Errorf("Registry 要求 Basic 认证，但未找到 %s 凭据", reference.Registry)
 		}
-		retry, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+		retryReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 		if err != nil {
 			return nil, err
 		}
-		retry.SetBasicAuth(creds.Username, creds.Password)
-		return l.client.Do(retry)
+		retryReq.SetBasicAuth(creds.Username, creds.Password)
+		return l.executeRequest(ctx, retryReq)
 	default:
 		return nil, fmt.Errorf("Registry 返回 401，但认证挑战无效: %q", challenge)
 	}
@@ -505,7 +562,7 @@ func (l *RemoteLister) fetchBearerToken(ctx context.Context, parameters map[stri
 	if creds.Username != "" {
 		request.SetBasicAuth(creds.Username, creds.Password)
 	}
-	response, err := l.client.Do(request)
+	response, err := l.executeRequest(ctx, request)
 	if err != nil {
 		return "", fmt.Errorf("请求 Registry token: %w", err)
 	}

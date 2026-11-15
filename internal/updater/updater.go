@@ -92,7 +92,7 @@ func New(cfg *config.Config, logger *slog.Logger, notifier notify.Notifier) *Upd
 		logger:   logger,
 		runner:   runner,
 		docker:   dockercli.NewClient(cfg.Docker, runner),
-		resolver: registryresolver.New(cfg.RegistryTimeout(), logger, cfg.RegistryProxy),
+		resolver: registryresolver.New(cfg.RegistryTimeout(), logger, cfg.RegistryProxy, cfg.RetryPolicy()),
 		notifier: notifier,
 	}
 }
