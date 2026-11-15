@@ -18,6 +18,7 @@ import (
 	"github.com/guchengod/compose-updater/internal/execx"
 	"github.com/guchengod/compose-updater/internal/notify"
 	registryresolver "github.com/guchengod/compose-updater/internal/registry"
+	"github.com/guchengod/compose-updater/internal/retry"
 	"github.com/guchengod/compose-updater/internal/scanner"
 )
 
@@ -349,7 +350,18 @@ func (u *Updater) runProject(parent context.Context, composeFile string, apply b
 
 	if apply {
 		pullCtx, pullCancel := context.WithTimeout(parent, u.cfg.PullTimeout())
-		_, err = composeClient.Pull(pullCtx, activeNames)
+		err = retry.Do(pullCtx, u.cfg.RetryPolicy(), func(stepCtx context.Context) error {
+			_, pullErr := composeClient.Pull(stepCtx, activeNames)
+			return pullErr
+		}, retry.IsRetryablePullError, func(attempt int, delay time.Duration, err error) {
+			log.Warn("docker_compose_pull_retrying",
+				"services", activeNames,
+				"attempt", attempt,
+				"max_attempts", u.cfg.RetryPolicy().Normalize().MaxAttempts,
+				"backoff_duration", delay,
+				"error", err,
+			)
+		})
 		pullCancel()
 		if err != nil {
 			return restoreOnFailure(fmt.Errorf("拉取 Compose 镜像: %w", err), nil)
@@ -358,7 +370,18 @@ func (u *Updater) runProject(parent context.Context, composeFile string, apply b
 		images := uniqueImages(activeNames, snapshots)
 		for _, image := range images {
 			pullCtx, pullCancel := context.WithTimeout(parent, u.cfg.PullTimeout())
-			_, err = u.docker.PullImage(pullCtx, image)
+			err = retry.Do(pullCtx, u.cfg.RetryPolicy(), func(stepCtx context.Context) error {
+				_, pullErr := u.docker.PullImage(stepCtx, image)
+				return pullErr
+			}, retry.IsRetryablePullError, func(attempt int, delay time.Duration, err error) {
+				log.Warn("docker_pull_image_retrying",
+					"image", image,
+					"attempt", attempt,
+					"max_attempts", u.cfg.RetryPolicy().Normalize().MaxAttempts,
+					"backoff_duration", delay,
+					"error", err,
+				)
+			})
 			pullCancel()
 			if err != nil {
 				return restoreOnFailure(fmt.Errorf("拉取镜像 %s: %w", image, err), nil)

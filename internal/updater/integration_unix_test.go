@@ -45,6 +45,44 @@ func TestLatestTagPullsAndRecreatesWithoutEditingCompose(t *testing.T) {
 	}
 }
 
+func TestUpdaterPullRetriesOnTransientFailure(t *testing.T) {
+	root := t.TempDir()
+	composePath := filepath.Join(root, "compose.yml")
+	original := "services:\n  web:\n    image: example/web:latest\n"
+	mustWriteFile(t, composePath, original, 0o600)
+	configPath := filepath.Join(root, "config.json")
+	content := `{"version":1,"paths":[` + jsonQuote(root) + `],"depth":0,"run_on_start":false,"retry":{"max_attempts":4,"initial_interval":"10ms","max_interval":"50ms"},"bark":{"enabled":false}}`
+	mustWriteFile(t, configPath, content, 0o600)
+	t.Setenv("COMPOSE_UPDATER_DATA_DIR", filepath.Join(root, "data"))
+	t.Setenv("COMPOSE_UPDATER_CONFIG_TIMEOUT", "2s")
+	t.Setenv("COMPOSE_UPDATER_REGISTRY_TIMEOUT", "2s")
+	t.Setenv("COMPOSE_UPDATER_PULL_TIMEOUT", "5s")
+	t.Setenv("COMPOSE_UPDATER_UPDATE_TIMEOUT", "2s")
+	t.Setenv("COMPOSE_UPDATER_HEALTH_TIMEOUT", "1s")
+	t.Setenv("COMPOSE_UPDATER_HEALTH_POLL_INTERVAL", "5ms")
+	t.Setenv("COMPOSE_UPDATER_STABLE_DURATION", "15ms")
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statePath, logPath := installFakeDocker(t, cfg, root)
+	mustWriteFile(t, statePath, "sha256:old\n", 0o600)
+	mustWriteFile(t, filepath.Join(root, "pull-fail-count"), "2\n", 0o600)
+
+	engine := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), notify.Noop{})
+	summary := engine.Run(context.Background(), true)
+	if summary.ProjectsFailed != 0 || summary.ProjectsUpdated != 1 || summary.ServicesUpdated != 1 {
+		t.Fatalf("project should succeed after pull retries, got summary: %+v", summary)
+	}
+
+	calls, _ := os.ReadFile(logPath)
+	pullCount := strings.Count(string(calls), " pull --ignore-buildable ")
+	if pullCount != 3 {
+		t.Fatalf("expected 3 pull calls (2 failures + 1 success), got %d:\n%s", pullCount, calls)
+	}
+}
+
 func TestCustomComposeProjectNameIsResolvedFromConfigFile(t *testing.T) {
 	root := t.TempDir()
 	composePath := filepath.Join(root, "compose.yml")
@@ -208,11 +246,13 @@ func installFakeDocker(t *testing.T, cfg *config.Config, root string) (statePath
 	t.Helper()
 	statePath = filepath.Join(root, "docker-state")
 	logPath = filepath.Join(root, "docker-calls")
+	pullFailFile := filepath.Join(root, "pull-fail-count")
 	scriptPath := filepath.Join(root, "docker")
 	script := `#!/bin/sh
 set -eu
 printf '%s\n' "$*" >> ` + shellQuote(logPath) + `
 state=` + shellQuote(statePath) + `
+pull_fail_file=` + shellQuote(pullFailFile) + `
 if [ "$1" = "version" ]; then echo 26.0.0; exit 0; fi
 if [ "$1" = "compose" ] && [ "$2" = "version" ]; then echo "Docker Compose version v2.40.0"; exit 0; fi
 if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
@@ -248,7 +288,16 @@ if [ "$1" = "compose" ]; then
       echo c1
       exit 0
       ;;
-    *' pull '*) echo pulled; exit 0 ;;
+    *' pull '*)
+      if [ -f "$pull_fail_file" ]; then
+        count=$(cat "$pull_fail_file")
+        if [ "$count" -gt 0 ]; then
+          echo $((count - 1)) > "$pull_fail_file"
+          echo "failed to fetch oauth token: dial tcp: connection reset by peer" >&2
+          exit 1
+        fi
+      fi
+      echo pulled; exit 0 ;;
     *' up -d '*) echo sha256:new > "$state"; echo updated; exit 0 ;;
   esac
 fi
