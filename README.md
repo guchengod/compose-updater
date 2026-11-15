@@ -208,6 +208,9 @@ Compose 中已经使用 `latest` 时不回写文件。程序每次执行 `docker
 | `run_on_start` | `true` | `serve` 启动后立即运行一次 |
 | `stable_only` | `true` | 只选择稳定版本；`false` 跟随最新发布标签 |
 | `registry_proxy` | 空 | 程序查询 Registry 使用的 HTTP/HTTPS/SOCKS5/SOCKS5H 代理 |
+| `retry.max_attempts` | `4` | 标签查询与镜像拉取的最大尝试次数（含首次尝试，范围 1-10） |
+| `retry.initial_interval` | `2s` | 指数退避的初始等待间隔 |
+| `retry.max_interval` | `30s` | 指数退避的最大等待间隔封顶 |
 | `bark.enabled` | `false` | 启用 Bark 通知 |
 | `bark.endpoint` | `https://api.day.app/push` | Bark Server，程序会自动补 `/push` |
 | `bark.device_key` | 空 | Bark Device Key；建议使用环境变量代替 |
@@ -353,6 +356,8 @@ COMPOSE_UPDATER_INSECURE_REGISTRIES=registry.local:5000,192.168.1.10:5000
 
 > [!IMPORTANT]
 > `docker compose pull` 由 Docker Engine 执行。`registry_proxy` 无法改变 Docker daemon 的网络；Docker Engine 或 Docker Desktop 必须单独配置拉取代理。容器部署时，代理地址也必须能从容器内部访问。
+>
+> 程序内置了带有随机抖动的指数退避重试机制（默认重试 3 次，间隔 2s -> 4s -> 8s...，最大 30s）。当代理瞬时断开或网络出现波动时，Registry 标签查询与镜像拉取均会自动重试，重试耗尽后才会安全终止并输出错误日志。可通过 `retry` 配置项自定义调整。
 
 ## 高级环境变量
 
